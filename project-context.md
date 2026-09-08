@@ -26,7 +26,7 @@ Two fact tables sharing dimensions:
 |---|---|---|---|
 | 00 | setup_catalog_schemas | one-time SQL: catalog, schemas, volume | done |
 | 01 | bronze_ingest | fetch new draws from Svenska Spel's API | done |
-| 02 | silver_transform | PySpark flatten into `matches` | not started |
+| 02 | silver_transform | PySpark flatten into `matches` | done |
 | 03 | gold_dimensions | build dim_team/date/league/season | not started |
 | 04 | gold_fact_match | Elo, form, rest days, odds → fact_match | not started |
 | 05 | gold_add_calibration | isotonic fit, MLflow log, merge into fact_match | not started |
