@@ -9,15 +9,19 @@ A PySpark + Delta Lake rebuild of an existing local Stryktipset (Swedish footbal
 ## Architecture decisions
 - Unity Catalog: catalog `stryktipset`, schemas `bronze` / `silver` / `gold`
 - Bronze: plain Python (`requests`) ingestion from Svenska Spel's API, raw JSON landed as files in a Volume (`stryktipset.bronze.raw_draws`) — deliberately kept as inspectable files, not a Delta table
-- Silver: PySpark — flattens/cleans bronze JSON into a `matches` Delta table
+- Silver: PySpark — flattens/cleans bronze JSON into a `matches` Delta table. Stays complete and unfiltered (every league, every country, cups, internationals, national teams) — this is what lets calibration (`05`) train on the full historical dataset even though gold is scoped narrower.
 - Gold: PySpark — a proper star schema, replacing the original's flat CSV
 - Calibrated probability is a column on `fact_match`, not a separate table (decided explicitly)
+- **Scope: `fact_match` only covers English and Swedish domestic leagues.** `dim_league` is built from a curated `LEAGUE_COUNTRY` name→country lookup (only the leagues you explicitly list); `04_gold_fact_match` filters `matches` down to that same set before building fact rows. Everything else — cups, Champions League, national teams, other countries — is simply excluded, not nulled out. Silver is untouched by this; only gold is scoped.
+- `dim_league.country` comes from the curated lookup, not derived from team data — an earlier idea (derive league country from the countries of teams that played in it) was considered and dropped as unnecessary complexity once the direct lookup proved simpler.
+- `dim_team` deliberately has **no** `league` or `country` column. League isn't a stable team attribute — teams get promoted/relegated between tiers, so it's a property of a match (`fact_match.league_key`), not the team. Country was considered but dropped along with the league-derivation idea above. `dim_team` is just `team_key` (uppercased `team_name`, for case-safety) and `team_name` — thin by design, kept mainly as a clean deduplicated team list and a place to add things like external team IDs (football-data.org/API-Football) later, if that integration happens.
+- `dim_date` is a full calendar — every calendar day, not just dates that had matches — spanning from the earliest match in the data to two years past today, so future draws are already covered. `day_of_week` uses the ISO convention (Monday=1..Sunday=7) via `date_format(..., "u")`, matching Swedish/European convention rather than Spark's Sunday-first default. No `matchday` column — that's `fact_match.draw_number`, not a calendar attribute.
 - Compute: Free Edition is serverless-only, capped at 5 concurrent job tasks account-wide — irrelevant here since the pipeline runs as one linear chain
 - Scheduling: one Databricks Job chaining notebooks `00`–`05`, cron set on the Job itself — replaces Airflow entirely for this version
 
 ## Star schema (gold layer)
 Two fact tables sharing dimensions:
-- `fact_match` — one row per match. Dimensions: `dim_team` (role-playing: home + away), `dim_date`, `dim_league`, `dim_season`. Measures: goals, Elo (home/away), odds, `calibrated_prob`, xG (nullable — only some leagues have it).
+- `fact_match` — one row per match, **English/Swedish domestic leagues only** (see scope decision above). Dimensions: `dim_team` (role-playing: home + away), `dim_date`, `dim_league`, `dim_season`. Measures: goals, Elo (home/away), odds, `calibrated_prob`, xG (nullable — only some leagues have it).
 - `fact_player_season` — one row per player per season (stretch goal, notebook `06`). Dimensions: `dim_player`, `dim_team`, `dim_season`. Measures: appearances, goals, assists, minutes, cards.
 - `dim_player` holds only slowly-changing bio fields (name, birthdate, nationality, position) — stats belong in the fact table, not the dimension.
 
@@ -27,9 +31,9 @@ Two fact tables sharing dimensions:
 | 00 | setup_catalog_schemas | one-time SQL: catalog, schemas, volume | done |
 | 01 | bronze_ingest | fetch new draws from Svenska Spel's API | done |
 | 02 | silver_transform | PySpark flatten into `matches` | done |
-| 03 | gold_dimensions | build dim_team/date/league/season | not started |
+| 03 | gold_dimensions | build dim_team/date/league/season | in progress — dim_team and dim_date built; dim_league, dim_season, write_dimension still TODO |
 | 04 | gold_fact_match | Elo, form, rest days, odds → fact_match | not started |
-| 05 | gold_add_calibration | isotonic fit, MLflow log, merge into fact_match | not started |
+| 05 | gold_add_calibration | isotonic fit, MLflow log, merge into fact_match | done |
 | 06 | gold_fact_player_season | player stats (stretch) | not started |
 
 ## Data sourcing notes
@@ -42,6 +46,8 @@ Two fact tables sharing dimensions:
 - Unity Catalog Volumes support plain Python file I/O directly (`pathlib.Path`, `os`) — `dbutils.fs` isn't required.
 - Notebooks don't need `if __name__ == "__main__":` — Databricks doesn't execute files like `python script.py` does, and the numbered filenames (`01_...`) can't be imported as modules anyway. Just call `main()` directly.
 - A failure inside a loop (e.g. one draw that didn't fetch) won't fail the notebook/Job unless you explicitly `raise` — otherwise the run reports Success even when something silently broke. Job failure notifications (email/Slack) are a separate setup step on top of the `raise`.
+- The `league` column from Svenska Spel's API is much messier than it looks — around 140 distinct values, including casing duplicates (`Damallsvenskan`/`DamAllsvenskan`), spacing duplicates (`La Liga`/`LaLiga`), and inconsistent comma usage for competition groups/qualifiers (some use `"X, Grupp A"`, others `"X Grupp A"` with no comma at all). Don't trust a quick `.show()` of distinct leagues — it truncates by default and hides most of this; use `.collect()` + plain `print()` instead.
+- `05_gold_calibrate`'s merge into `fact_match` joins on `match_id` — worth confirming once `04` is built that `fact_match` actually carries that column, since the star schema's stated PK for `fact_match` is `match_key` (a surrogate), not `match_id`.
 
 ## How Adam wants to work
 - Writes the code himself — wants review and explanation, not finished files handed over.

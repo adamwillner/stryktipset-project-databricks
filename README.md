@@ -12,6 +12,8 @@ flowchart LR
 
 ## Gold layer — star schema
 
+`fact_match` is scoped to English and Swedish domestic leagues only (see project-context.md) — everything else in the raw data (cups, European competitions, national teams, other countries) stays in silver but never reaches gold.
+
 ```mermaid
 erDiagram
     DIM_TEAM ||--o{ FACT_MATCH : "home_team"
@@ -27,12 +29,10 @@ erDiagram
     DIM_TEAM {
         string team_key PK
         string team_name
-        string league
     }
     DIM_DATE {
         string date_key PK
         date full_date
-        int matchday
     }
     DIM_LEAGUE {
         string league_key PK
@@ -86,14 +86,14 @@ erDiagram
 | 02 | `silver_transform` | 🥈 | flatten & clean into `matches` | ✅ |
 | 03 | `gold_dimensions` | 🥇 | build `dim_team` / `dim_date` / `dim_league` / `dim_season` | ⬜ |
 | 04 | `gold_fact_match` | 🥇 | Elo, form, rest days, odds → `fact_match` | ⬜ |
-| 05 | `gold_add_calibration` | 🥇 | isotonic fit, MLflow log, merged into `fact_match` | ⬜ |
+| 05 | `gold_add_calibration` | 🥇 | isotonic fit, MLflow log, merged into `fact_match` | ✅ |
 | 06 | `gold_fact_player_season` | 🥇 | player stats (stretch goal) | ⬜ |
 
 `00`–`05` chain into one Databricks Job; `06` waits until player-stats sourcing is worked out.
 
 ## Stack
 
-Databricks Free Edition · PySpark · Delta Lake · Unity Catalog · Databricks Jobs · MLflow *(planned)*
+Databricks Free Edition · PySpark · Delta Lake · Unity Catalog · Databricks Jobs · MLflow
 
 ## Why this exists
 
