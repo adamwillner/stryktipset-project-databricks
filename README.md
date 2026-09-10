@@ -31,8 +31,17 @@ erDiagram
         string team_name
     }
     DIM_DATE {
-        string date_key PK
+        int date_key PK
         date full_date
+        int year
+        int quarter
+        int month
+        string month_name
+        int day
+        int day_of_week
+        string day_name
+        int week_of_year
+        boolean is_weekend
     }
     DIM_LEAGUE {
         string league_key PK
@@ -41,7 +50,9 @@ erDiagram
     }
     DIM_SEASON {
         string season_key PK
-        string season_label
+        date start_date
+        date end_date
+        boolean is_current
     }
     DIM_PLAYER {
         string player_key PK
@@ -54,7 +65,7 @@ erDiagram
         string match_key PK
         string home_team_key FK
         string away_team_key FK
-        string date_key FK
+        int date_key FK
         string league_key FK
         string season_key FK
         int home_goals
@@ -84,7 +95,7 @@ erDiagram
 | 00 | `setup_catalog_schemas` | — | one-time: catalog, schemas, volume | ✅ |
 | 01 | `bronze_ingest` | 🥉 | fetch new draws from Svenska Spel's API | ✅ |
 | 02 | `silver_transform` | 🥈 | flatten & clean into `matches` | ✅ |
-| 03 | `gold_dimensions` | 🥇 | build `dim_team` / `dim_date` / `dim_league` / `dim_season` | ⬜ |
+| 03 | `gold_dimensions` | 🥇 | build `dim_team` / `dim_date` / `dim_league` / `dim_season` | ✅ |
 | 04 | `gold_fact_match` | 🥇 | Elo, form, rest days, odds → `fact_match` | ⬜ |
 | 05 | `gold_add_calibration` | 🥇 | isotonic fit, MLflow log, merged into `fact_match` | ✅ |
 | 06 | `gold_fact_player_season` | 🥇 | player stats (stretch goal) | ⬜ |
