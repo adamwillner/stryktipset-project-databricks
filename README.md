@@ -12,7 +12,7 @@ flowchart LR
 
 ## Gold layer — star schema
 
-`fact_match` is scoped to English and Swedish domestic leagues only (see project-context.md) — everything else in the raw data (cups, European competitions, national teams, other countries) stays in silver but never reaches gold.
+`fact_match` is scoped to English and Swedish domestic leagues only (see project-context.md) — everything else in the raw data (cups, European competitions, national teams, other countries) stays in silver but never reaches gold. `elo_home`/`elo_away`/`xg_home_away` are in the schema but not yet populated by any notebook — Elo needs its own dedicated pass (it's sequential/stateful, not a plain column expression), and xG has no confirmed free data source covering these leagues yet.
 
 ```mermaid
 erDiagram
@@ -70,11 +70,22 @@ erDiagram
         string season_key FK
         int home_goals
         int away_goals
-        float elo_home
-        float elo_away
-        float odds_home_draw_away
-        float calibrated_prob
-        float xg_home_away
+        string result
+        float streck_1
+        float streck_x
+        float streck_2
+        float odds_1
+        float odds_x
+        float odds_2
+        float start_odds_1
+        float start_odds_x
+        float start_odds_2
+        float calibrated_1
+        float calibrated_x
+        float calibrated_2
+        float elo_home "not built yet"
+        float elo_away "not built yet"
+        float xg_home_away "no data source yet"
     }
     FACT_PLAYER_SEASON {
         string player_key FK
@@ -96,11 +107,11 @@ erDiagram
 | 01 | `bronze_ingest` | 🥉 | fetch new draws from Svenska Spel's API | ✅ |
 | 02 | `silver_transform` | 🥈 | flatten & clean into `matches` | ✅ |
 | 03 | `gold_dimensions` | 🥇 | build `dim_team` / `dim_date` / `dim_league` / `dim_season` | ✅ |
-| 04 | `gold_fact_match` | 🥇 | Elo, form, rest days, odds → `fact_match` | ⬜ |
+| 04 | `gold_fact_match` | 🥇 | join dims, derive keys, goals & odds → `fact_match` | ✅ |
 | 05 | `gold_add_calibration` | 🥇 | isotonic fit, MLflow log, merged into `fact_match` | ✅ |
 | 06 | `gold_fact_player_season` | 🥇 | player stats (stretch goal) | ⬜ |
 
-`00`–`05` chain into one Databricks Job; `06` waits until player-stats sourcing is worked out.
+`00`–`05` chain into one Databricks Job; `06` waits until player-stats sourcing is worked out. Elo isn't in the chain yet — planned as its own pass, not yet assigned a notebook number.
 
 ## Stack
 
