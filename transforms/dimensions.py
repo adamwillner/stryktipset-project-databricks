@@ -75,16 +75,14 @@ def build_dim_date(df: DataFrame) -> DataFrame:
     )
 
 
-def build_dim_league(spark: SparkSession, league_country: dict = LEAGUE_COUNTRY) -> DataFrame:
-    """One row per key in LEAGUE_COUNTRY, with its country. Built from
-    this dict, not from matches -- any league not in LEAGUE_COUNTRY
-    simply doesn't get a row, and (via the filter in 04) won't appear in
-    fact_match either.
+def build_dim_league(df: DataFrame) -> DataFrame:
+    """df: two columns, league_name/country -- the raw LEAGUE_COUNTRY dict
+    as a DataFrame.
 
     Columns: league_key, league_name, country.
     """
     return (
-        spark.createDataFrame(list(league_country.items()), ['league_name', 'country'])
+        df
         .withColumn('league_key', F.upper('league_name'))
         .dropDuplicates(['league_key'])
     )
