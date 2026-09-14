@@ -113,6 +113,10 @@ erDiagram
 
 `00`–`05` chain into one Databricks Job; `06` waits until player-stats sourcing is worked out. Elo isn't in the chain yet — planned as its own pass, not yet assigned a notebook number.
 
+## Code layout
+
+Gold-layer transform functions live in `transforms/` (`silver.py`, `dimensions.py`, `fact_match.py`, `calibration.py`), not inline in the notebooks — notebooks `02`–`05` just import from there and orchestrate (read tables, call the transform, write the result). This keeps the actual logic importable and testable with plain `pytest` (see `tests/`, currently scaffolded but empty) without needing a Databricks connection.
+
 ## Stack
 
 Databricks Free Edition · PySpark · Delta Lake · Unity Catalog · Databricks Jobs · MLflow
