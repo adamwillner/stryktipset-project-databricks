@@ -14,14 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pytest
 from pyspark.sql import SparkSession
 
-
 @pytest.fixture(scope="session")
 def spark():
-    """A local SparkSession, shared across the whole test run so we're not
-    paying Spark's startup cost per test."""
-    return (
-        SparkSession.builder
-        .master("local[1]")
-        .appName("stryktipset-tests")
-        .getOrCreate()
-    )
+    return SparkSession.builder.getOrCreate()
