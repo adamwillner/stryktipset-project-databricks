@@ -111,7 +111,7 @@ erDiagram
 | 05 | `gold_add_calibration` | 🥇 | isotonic fit, MLflow log, merged into `fact_match` | ✅ |
 | 06 | `gold_fact_player_season` | 🥇 | player stats (stretch goal) | ⬜ |
 
-`00`–`05` chain into one Databricks Job; `06` waits until player-stats sourcing is worked out. Elo isn't in the chain yet — planned as its own pass, not yet assigned a notebook number.
+`01`–`05` chain into one Databricks Job, which reads the notebooks **from GitHub** (`main`) rather than from the Databricks Git folder — so only committed and pushed code ever runs on the schedule. `00` is one-time setup and isn't a task in the Job. `06` waits until player-stats sourcing is worked out. Elo isn't in the chain yet — planned as its own pass, not yet assigned a notebook number.
 
 ## Code layout
 
@@ -119,7 +119,7 @@ Gold-layer transform functions live in `transforms/` (`silver.py`, `dimensions.p
 
 `pytest` runs from inside a Databricks notebook (`%pip install pytest` in its own cell, then `pytest.main(["tests"])` in the next) — Free Edition is serverless-only, so there's no local Spark to spin up for tests; `tests/conftest.py`'s `spark` fixture reuses whichever Spark Connect session the notebook already has.
 
-Test coverage so far: `transforms/silver.py` and `transforms/dimensions.py` are fully tested; `transforms/calibration.py`'s deterministic pieces are tested (the statistical fit itself is checked for shape — non-decreasing, stays in [0, 1] — not exact values); `transforms/fact_match.py` doesn't have tests yet.
+Test coverage so far: `transforms/silver.py` and `transforms/dimensions.py` are fully tested; `transforms/calibration.py`'s deterministic pieces are tested (the statistical fit itself is checked for shape — non-decreasing, stays in [0, 1] — not exact values); `transforms/fact_match.py` is tested too — scoping drop-out, the derived keys, the three season-key shapes, and the null `calibrated_*` placeholders.
 
 ## Stack
 
