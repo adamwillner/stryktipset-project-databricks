@@ -40,13 +40,9 @@ Three copies, all normally on the same commit:
 | local clone — `C:\Users\AdamWillner\stryktipset-project-databricks` | docs, `transforms/`, `tests/`; what Cowork and Claude Code work against |
 | GitHub — `adamwillner/stryktipset-project-databricks` | the hub the other two sync through, and — since the Job uses `git_source` — what actually runs |
 
-The `databricks` CLI is set up with a `free` profile (`databricks configure --profile free`, host `https://dbc-2e6f09e7-192b.cloud.databricks.com`, personal access token scoped to `workspace`/`files`/`jobs`). With it the local clone can be mirrored into the Git folder live:
+The `databricks` CLI is set up with a `free` profile (`databricks configure --profile free`, host `https://dbc-2e6f09e7-192b.cloud.databricks.com`, personal access token scoped to `workspace`/`files`/`jobs`). It's for inspecting jobs and runs — not for moving code.
 
-```
-databricks sync . "/Users/adamwillner2@gmail.com/stryktipset-project-databricks" --watch -p free
-```
-
-That is one-way only (local to workspace) and nothing comes back, so while it runs, edit locally and treat the Git folder as review-and-commit only — otherwise a Databricks-side edit gets overwritten. The watcher lives only as long as the process that started it.
+**Code moves through git only:** edit locally, commit, push, then Pull in the Databricks Git folder. `databricks sync --watch` can mirror the local clone into the folder live and was tried on 2026-09-23, but was deliberately dropped: it writes files behind git's back, so every local edit then shows as uncommitted changes in the Git folder — which have to be discarded, not committed (committing them would duplicate commits already on GitHub). Little upside now that the Job reads GitHub rather than the folder; all it saved was a click on Pull.
 
 ## Testing
 `tests/` mirrors `transforms/`, one `test_*.py` per module, plus `tests/conftest.py` holding a shared `spark` pytest fixture. As of today: `transforms/silver.py` and `transforms/dimensions.py` are fully tested; `transforms/calibration.py`'s deterministic pieces (`to_long_format`, `calibrate_matches`, `evaluate_calibration`) are tested, plus a shape/sanity test for `fit_calibration_curve` (non-decreasing output, stays in [0, 1] — a statistical fit can't be asserted to an exact value); `transforms/fact_match.py` is covered by a single `test_build_fact_match` (one test per function, matching the other modules): an out-of-scope league dropping out of the inner join, the derived `match_key`/team/date/league keys, the three season-key shapes (England Aug, England Mar, Sweden), and `calibrated_1/x/2` arriving as null doubles rather than missing columns. Three testing-specific gotchas worth knowing (how `pytest` runs on serverless, building nested fake data, `.collect()` row order) are folded into the gotchas list below rather than repeated here.
