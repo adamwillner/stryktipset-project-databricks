@@ -32,6 +32,23 @@ Gold-layer transform functions (`build_dim_team`, `build_dim_date`, `build_dim_l
 - **`spark`-global gotcha found while extracting `build_dim_date`/`build_dim_league`:** both referenced a bare `spark` name, which works fine inline in a notebook cell (Databricks injects `spark` into the notebook's own global namespace) but breaks with `NameError` once the function moves into an imported module — a function's globals resolve from its *defining* module, not the caller's. `build_dim_date` already takes a `df` argument, so it derives the session via `df.sparkSession` instead of the bare name. `build_dim_league` originally had no DataFrame to derive one from, so it briefly took `spark: SparkSession` as an explicit parameter — but since `LEAGUE_COUNTRY` is just a static dict with no dependency on other Spark data, the cleaner fix was to move `spark.createDataFrame(...)` into `03`'s `main()` itself (which already has `spark`) and have `build_dim_league(df)` take a plain DataFrame, same shape as every other `build_dim_*` function. `main()` now does `league_df = spark.createDataFrame(list(LEAGUE_COUNTRY.items()), ['league_name', 'country'])` then `build_dim_league(league_df)`. Worth remembering the general lesson (a moved function can't see the notebook's `spark`) even though this specific function no longer needs either workaround.
 
 ## Repo topology
+
+```mermaid
+flowchart TB
+    subgraph PC["Your computer"]
+        W["Windows<br/>your files, git, Databricks CLI"]
+        L["WSL (Ubuntu)<br/>runs Spark and the tests"]
+    end
+    G["GitHub<br/>the source of truth"]
+    subgraph DB["Databricks"]
+        F["Git folder<br/>where you open notebooks"]
+        J["The weekly job<br/>Saturdays 15:00"]
+    end
+    W -- "commit + push" --> G
+    G -- "you pull" --> F
+    G -- "reads this code" --> J
+```
+
 Three copies, all normally on the same commit:
 
 | copy | role |
