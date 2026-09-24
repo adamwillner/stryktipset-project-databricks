@@ -9,15 +9,15 @@ Databricks, but a function moved into an imported module does NOT see
 that -- a function's globals are its *defining* module's globals, not
 the caller's. build_dim_date sidesteps this by using `df.sparkSession`
 (derived from the DataFrame it's already given) instead of a bare
-`spark` reference. build_dim_league has no DataFrame argument to derive
-one from, so it takes `spark` as an explicit parameter instead --
-03's main() now calls build_dim_league(spark) rather than
-build_dim_league().
+`spark` reference. build_dim_league briefly took `spark` as an explicit
+parameter for the same reason, but since LEAGUE_COUNTRY is a static dict
+03's main() now builds the DataFrame itself and passes it in, so every
+build_dim_* function has the same plain DataFrame shape.
 """
 
 import datetime
 
-from pyspark.sql import DataFrame, SparkSession, functions as F
+from pyspark.sql import DataFrame, Window, functions as F
 
 LEAGUE_COUNTRY = {
     "Premier League": "England",
@@ -38,15 +38,32 @@ LEAGUE_COUNTRY = {
 
 
 def build_dim_team(df: DataFrame) -> DataFrame:
+    """One row per team: team_key, team_name, team_id, country.
 
-    home_team = df.select(F.col('home_team').alias('team_name'))
-    away_team = df.select(F.col('away_team').alias('team_name'))
+    team_key stays the uppercased name -- it is what fact_match joins on.
+    team_id is Svenska Spel's own id, which is NOT stable across the full
+    history: they have renumbered at least once (1000041 in 2013, 448 by
+    2023, 69 by 2026). So the dedupe takes the newest row per team via a
+    window rather than dropDuplicates, which picks arbitrarily and could
+    hand a team a decade-old id -- the same reason 02 dedupes match_id
+    with row_number rather than dropDuplicates.
+    """
+    columns = lambda side: df.select(
+        F.col(f'{side}_team').alias('team_name'),
+        F.col(f'{side}_team_id').alias('team_id'),
+        F.col(f'{side}_team_country').alias('country'),
+        F.col('match_start'),
+    )
+
+    newest_per_team = Window.partitionBy('team_key').orderBy(F.col('match_start').desc())
 
     return (
-        home_team
-        .union(away_team)
+        columns('home')
+        .union(columns('away'))
         .withColumn('team_key', F.upper('team_name'))
-        .dropDuplicates(['team_key'])
+        .withColumn('row_num', F.row_number().over(newest_per_team))
+        .filter(F.col('row_num') == 1)
+        .select('team_key', 'team_name', 'team_id', 'country')
     )
 
 

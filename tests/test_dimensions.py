@@ -10,8 +10,14 @@ from transforms.dimensions import (
 
 def test_build_dim_team(spark):
   df = spark.createDataFrame(
-      [("Arsenal", "Chelsea"), ("Chelsea", "Arsenal")],
-      ["home_team", "away_team"],
+      [
+          # older draw, back when Svenska Spel used the 1000xxx id range
+          ("Arsenal", "Chelsea", 1000041, 1000489, "England", "England", "2023-01-01T15:00:00"),
+          # newer draw, after they renumbered -- this one must win
+          ("Chelsea", "Arsenal", 70, 69, "England", "England", "2026-01-01T15:00:00"),
+      ],
+      "home_team string, away_team string, home_team_id int, away_team_id int, "
+      "home_team_country string, away_team_country string, match_start string",
   )
 
   result = build_dim_team(df)
@@ -19,6 +25,12 @@ def test_build_dim_team(spark):
 
   assert rows['ARSENAL']['team_name'] == 'Arsenal'
   assert rows['CHELSEA']['team_name'] == 'Chelsea'
+
+  # ids are not stable across the history, so the newest row wins
+  assert rows['ARSENAL']['team_id'] == 69
+  assert rows['CHELSEA']['team_id'] == 70
+
+  assert rows['ARSENAL']['country'] == 'England'
 
 def test_build_dim_date(spark):
   df = spark.createDataFrame(

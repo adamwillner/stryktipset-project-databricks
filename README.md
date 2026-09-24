@@ -29,6 +29,8 @@ erDiagram
     DIM_TEAM {
         string team_key PK
         string team_name
+        int team_id
+        string country
     }
     DIM_DATE {
         int date_key PK
@@ -80,6 +82,11 @@ erDiagram
         float start_odds_1
         float start_odds_x
         float start_odds_2
+        float favourite_odds_1 "margin-free, recent draws only"
+        float favourite_odds_x
+        float favourite_odds_2
+        string status
+        string betradar_id "join key, 2019+"
         float calibrated_1
         float calibrated_x
         float calibrated_2

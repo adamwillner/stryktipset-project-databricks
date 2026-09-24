@@ -66,6 +66,11 @@ def build_fact_match(matches: DataFrame, dim_league: DataFrame) -> DataFrame:
             F.col('start_odds_1'),
             F.col('start_odds_x'),
             F.col('start_odds_2'),
+            F.col('favourite_odds_1'),
+            F.col('favourite_odds_x'),
+            F.col('favourite_odds_2'),
+            F.col('status'),
+            F.col('betradar_id'),
         )
         .withColumn('calibrated_1', F.lit(None).cast('double'))
         .withColumn('calibrated_x', F.lit(None).cast('double'))
