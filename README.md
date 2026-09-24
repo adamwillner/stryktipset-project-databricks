@@ -112,7 +112,7 @@ erDiagram
 | 06 | `gold_elo` | 🥇 | pre-match Elo ratings, merged into `fact_match` | ✅ |
 | 07 | `gold_fact_player_season` | 🥇 | player stats (stretch goal) | ⬜ |
 
-`01`–`05` chain into one Databricks Job, which reads the notebooks **from GitHub** (`main`) rather than from the Databricks Git folder — so only committed and pushed code ever runs on the schedule. `00` is one-time setup and isn't a task in the Job. `06` is written and tested but not yet added to the chain. `07` waits until player-stats sourcing is worked out.
+`01`–`06` chain into one Databricks Job, which reads the notebooks **from GitHub** (`main`) rather than from the Databricks Git folder — so only committed and pushed code ever runs on the schedule. `00` is one-time setup and isn't a task in the Job. `07` waits until player-stats sourcing is worked out.
 
 ## Code layout
 
