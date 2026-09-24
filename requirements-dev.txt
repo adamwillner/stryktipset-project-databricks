@@ -7,3 +7,8 @@ pytest==9.1.1
 scikit-learn>=1.5
 pandas>=2.0,<3.0
 pyarrow>=15.0
+
+# notebook kernel for local scratch work (see README) -- the kernel spec
+# bakes in JAVA_HOME/PYSPARK_PYTHON, register it with:
+#   python -m ipykernel install --user --name stryktipset --env JAVA_HOME ...
+ipykernel>=6.29
