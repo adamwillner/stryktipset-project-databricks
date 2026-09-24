@@ -18,7 +18,15 @@ def extract_match_row(draw_number: Column, event: Column) -> list:
     home_goals = event["match"]["participants"][0]["result"].try_cast("int")
     away_goals = event["match"]["participants"][1]["result"].try_cast("int")
 
-    result = F.when(home_goals > away_goals, '1').when(home_goals == away_goals, 'X').otherwise('2')
+    # Three explicit branches and deliberately no .otherwise(): when a match
+    # hasn't been played both goal columns are null, every comparison below is
+    # null rather than true, and `result` comes back null. An .otherwise('2')
+    # here would silently label every unplayed fixture an away win.
+    result = (
+        F.when(home_goals > away_goals, '1')
+        .when(home_goals == away_goals, 'X')
+        .when(home_goals < away_goals, '2')
+    )
 
     return [
         draw_number.alias('draw_number'),

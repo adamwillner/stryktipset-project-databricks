@@ -10,9 +10,16 @@ OUTCOMES = ("1", "X", "2")
 def to_long_format(df: DataFrame) -> DataFrame:
     """One row per (match, outcome): predicted_prob is the streck value,
     outcome is '1'/'X'/'2', actual_occurred is True when that outcome is
-    what actually happened."""
+    what actually happened.
+
+    Unplayed fixtures are dropped: they have no result to learn from, and
+    including them would train the calibration curves on outcomes that
+    never occurred. Only the fitting path filters -- calibrate_matches
+    still scores every match, which is the point for an upcoming coupon.
+    """
     return (
-        df.unpivot(
+        df.filter(F.col("result").isNotNull())
+        .unpivot(
             ids=["draw_number", "event_number", "match_id", "result"],
             values=["streck_1", "streck_x", "streck_2"],
             variableColumnName="streck_col",

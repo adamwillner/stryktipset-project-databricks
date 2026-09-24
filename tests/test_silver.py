@@ -45,14 +45,40 @@ def test_extract_match_row(spark):
         startOdds=Row(one="1,90", x="3,30", two="4,00"),
     )
 
-    df = spark.createDataFrame([Row(drawNumber=1, event=event)])
+    # same shape, but not played yet -- Svenska Spel has no score for it
+    unplayed = Row(
+        eventNumber=2,
+        match=Row(
+            matchId=456,
+            matchStart="2024-01-02T15:00:00",
+            participants=[
+                Row(name="Home Team", result=None),
+                Row(name="Away Team", result=None),
+            ],
+            league=Row(name="Premier League"),
+        ),
+        svenskaFolket=Row(one="45,00", x="30,00", two="25,00"),
+        odds=Row(one="1,80", x="3,40", two="4,20"),
+        startOdds=Row(one="1,90", x="3,30", two="4,00"),
+    )
+
+    df = spark.createDataFrame(
+        [Row(drawNumber=1, event=event), Row(drawNumber=1, event=unplayed)]
+    )
 
     result = df.select(extract_match_row(F.col("drawNumber"), F.col("event")))
 
-    row = result.collect()[0]
+    rows = {row["match_id"]: row for row in result.collect()}
+    row = rows[123]
 
     assert row["home_team"] == "Home Team"
     assert row["away_team"] == "Away Team"
     assert row["home_goals"] == 2
     assert row["away_goals"] == 1
     assert row["result"] == "1"
+
+    # an unplayed fixture must come back as null, not as an away win --
+    # there is no .otherwise() branch for exactly this reason
+    assert rows[456]["home_goals"] is None
+    assert rows[456]["away_goals"] is None
+    assert rows[456]["result"] is None

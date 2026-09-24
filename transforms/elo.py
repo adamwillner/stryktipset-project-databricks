@@ -38,10 +38,10 @@ def build_elo(matches: DataFrame) -> DataFrame:
     been applied would leak the outcome into the feature, and a model
     trained on it would look excellent and predict nothing.
 
-    Unplayed fixtures are dropped on home_goals/away_goals rather than on
-    `result`: silver's result expression falls through to '2' when the
-    goal columns are null (see transforms/silver.py), so an unplayed
-    match is indistinguishable from an away win by that column alone.
+    Unplayed fixtures are dropped on home_goals/away_goals rather than
+    on `result`. Silver nulls `result` for them now, so either would
+    work, but the goal columns are the direct evidence that a match was
+    played and don't depend on a derived column staying correct.
 
     Sequential by nature -- each match depends on both teams' entire
     history in order -- so this is a plain loop over a pandas frame

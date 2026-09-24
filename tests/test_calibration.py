@@ -28,11 +28,18 @@ from transforms.calibration import (
 
 def test_to_long_format(spark):
   df = spark.createDataFrame(
-      [(1, 1, 123, "1", 0.45, 0.30, 0.25)], 
-      ["draw_number", "event_number", "match_id", "result", "streck_1", "streck_x", "streck_2"]
+      [
+          (1, 1, 123, "1", 0.45, 0.30, 0.25),
+          (1, 2, 456, None, 0.40, 0.35, 0.25),  # not played yet
+      ],
+      "draw_number int, event_number int, match_id int, result string, "
+      "streck_1 double, streck_x double, streck_2 double",
     )
 
   result = to_long_format(df)
+
+  # only the played match contributes -- 3 outcomes, not 6
+  assert result.count() == 3
 
   rows = {row["outcome"]: row for row in result.collect()}
 
