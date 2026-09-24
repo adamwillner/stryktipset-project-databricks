@@ -10,7 +10,10 @@ def build_fact_match(matches: DataFrame, dim_league: DataFrame) -> DataFrame:
     columns); get league_key + country from the join; derive season_key
     from country + match_start using the same per-country logic as
     build_dim_season. Bring across home_goals/away_goals and odds.
-    Elo, calibrated_prob, xG: not yet -- added by later notebooks/passes.
+    calibrated_1/x/2 and elo_home/elo_away are created here as null
+    placeholders and filled in later by 05 and 06 -- Delta resolves a
+    named MERGE assignment before schema evolution runs, so the columns
+    have to exist first. xG has no source yet.
     """
     joined_df = (
         matches
@@ -67,4 +70,6 @@ def build_fact_match(matches: DataFrame, dim_league: DataFrame) -> DataFrame:
         .withColumn('calibrated_1', F.lit(None).cast('double'))
         .withColumn('calibrated_x', F.lit(None).cast('double'))
         .withColumn('calibrated_2', F.lit(None).cast('double'))
+        .withColumn('elo_home', F.lit(None).cast('double'))
+        .withColumn('elo_away', F.lit(None).cast('double'))
     )

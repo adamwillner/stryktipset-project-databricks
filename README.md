@@ -12,7 +12,7 @@ flowchart LR
 
 ## Gold layer — star schema
 
-`fact_match` is scoped to English and Swedish domestic leagues only (see project-context.md) — everything else in the raw data (cups, European competitions, national teams, other countries) stays in silver but never reaches gold. `elo_home`/`elo_away`/`xg_home_away` are in the schema but not yet populated by any notebook — Elo needs its own dedicated pass (it's sequential/stateful, not a plain column expression), and xG has no confirmed free data source covering these leagues yet.
+`fact_match` is scoped to English and Swedish domestic leagues only (see project-context.md) — everything else in the raw data (cups, European competitions, national teams, other countries) stays in silver but never reaches gold. `elo_home`/`elo_away` hold each team's rating **as it stood before kick-off**, computed by `06` — a pre-match value, so it can be used as a predictor without leaking the result. `xg_home_away` is still in the schema but unpopulated: no confirmed free data source covers these leagues.
 
 ```mermaid
 erDiagram
@@ -83,8 +83,8 @@ erDiagram
         float calibrated_1
         float calibrated_x
         float calibrated_2
-        float elo_home "not built yet"
-        float elo_away "not built yet"
+        float elo_home "pre-match rating"
+        float elo_away "pre-match rating"
         float xg_home_away "no data source yet"
     }
     FACT_PLAYER_SEASON {
@@ -109,9 +109,10 @@ erDiagram
 | 03 | `gold_dimensions` | 🥇 | build `dim_team` / `dim_date` / `dim_league` / `dim_season` | ✅ |
 | 04 | `gold_fact_match` | 🥇 | join dims, derive keys, goals & odds → `fact_match` | ✅ |
 | 05 | `gold_add_calibration` | 🥇 | isotonic fit, MLflow log, merged into `fact_match` | ✅ |
-| 06 | `gold_fact_player_season` | 🥇 | player stats (stretch goal) | ⬜ |
+| 06 | `gold_elo` | 🥇 | pre-match Elo ratings, merged into `fact_match` | ✅ |
+| 07 | `gold_fact_player_season` | 🥇 | player stats (stretch goal) | ⬜ |
 
-`01`–`05` chain into one Databricks Job, which reads the notebooks **from GitHub** (`main`) rather than from the Databricks Git folder — so only committed and pushed code ever runs on the schedule. `00` is one-time setup and isn't a task in the Job. `06` waits until player-stats sourcing is worked out. Elo isn't in the chain yet — planned as its own pass, not yet assigned a notebook number.
+`01`–`05` chain into one Databricks Job, which reads the notebooks **from GitHub** (`main`) rather than from the Databricks Git folder — so only committed and pushed code ever runs on the schedule. `00` is one-time setup and isn't a task in the Job. `06` is written and tested but not yet added to the chain. `07` waits until player-stats sourcing is worked out.
 
 ## Code layout
 
@@ -127,7 +128,7 @@ uv pip install --python ~/venvs/stryktipset/bin/python -r requirements-dev.txt
 
 After that, `./run-tests.sh` from WSL runs all 11 tests in about 40 seconds. Local Spark is *classic* Spark, not the Spark Connect session Free Edition gives you, so it's a fast inner loop on `transforms/` — not a replacement for running the suite in a notebook before trusting a pipeline change.
 
-Test coverage so far: `transforms/silver.py` and `transforms/dimensions.py` are fully tested; `transforms/calibration.py`'s deterministic pieces are tested (the statistical fit itself is checked for shape — non-decreasing, stays in [0, 1] — not exact values); `transforms/fact_match.py` is tested too — scoping drop-out, the derived keys, the three season-key shapes, and the null `calibrated_*` placeholders.
+Test coverage so far: `transforms/silver.py` and `transforms/dimensions.py` are fully tested; `transforms/calibration.py`'s deterministic pieces are tested (the statistical fit itself is checked for shape — non-decreasing, stays in [0, 1] — not exact values); `transforms/fact_match.py` is tested too — scoping drop-out, the derived keys, the three season-key shapes, and the null `calibrated_*`/`elo_*` placeholders. `transforms/elo.py` is tested too — the rating curve itself, and that ratings come back pre-match and zero-sum.
 
 ## Stack
 

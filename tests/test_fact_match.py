@@ -53,3 +53,7 @@ def test_build_fact_match(spark):
   assert rows["m1"]["calibrated_x"] is None
   assert rows["m1"]["calibrated_2"] is None
   assert result.schema["calibrated_1"].dataType.simpleString() == "double"
+
+  assert rows["m1"]["elo_home"] is None
+  assert rows["m1"]["elo_away"] is None
+  assert result.schema["elo_home"].dataType.simpleString() == "double"
