@@ -25,6 +25,8 @@ draw 4972 — 13 matches
 10  Rotherham - Crewe       54%/27%/19%      41%      +27%
 ```
 
+The `elo xs` column is `elo_expected_score` in the table — an expected *score*, where a draw counts as half a win, not the probability of a home win.
+
 `gap` is where the crowd and the ratings disagree, which is the only place there's anything to learn — agreeing with the crowd tells you nothing you didn't already know. Both sides are *expected scores* (Elo counts a draw as half a win), so the crowd is converted with `streck_1 + streck_x / 2` before comparing; subtracting `streck_1` directly would bake in half the draw probability.
 
 It reads **silver, not gold**. Gold is scoped to England and Sweden, but around 16% of coupon matches aren't — draw 4972 had two UEFA Nations League fixtures and no Premier League at all. The table accumulates every week, so these predictions can eventually be joined back to results and scored.

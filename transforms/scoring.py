@@ -5,7 +5,7 @@ from pyspark.sql import Column, DataFrame, functions as F
 from transforms.elo import HOME_ADVANTAGE
 
 
-def elo_probability(home_rating: Column, away_rating: Column) -> Column:
+def expected_home_score_column(home_rating: Column, away_rating: Column) -> Column:
     """Spark-column twin of transforms.elo.expected_home_score.
 
     The formula is duplicated rather than imported because
@@ -15,9 +15,13 @@ def elo_probability(home_rating: Column, away_rating: Column) -> Column:
     the same guard test_build_fact_match applies to season_key, which is
     duplicated between build_dim_season and build_fact_match.
 
-    Note this is P(home win) on Elo's chess-shaped scale, where a draw
-    counts as half a win. It is not a 1X2 probability and must not be
-    read as one: splitting it into three outcomes is a separate problem.
+    The result is an expected *score*, not a probability: on Elo's chess
+    scale a win is 1, a draw 0.5 and a loss 0, so it is roughly
+    `P(home win) + P(draw)/2`. Hence the column name
+    `elo_expected_score` -- it was briefly called `elo_prob_1`, which
+    invited exactly the misreading that broke 07's first gap column.
+    Splitting it into a real 1X2 probability needs a draw model and is a
+    separate problem.
     """
     gap = away_rating - (home_rating + F.lit(HOME_ADVANTAGE))
     return F.lit(1.0) / (F.lit(1.0) + F.pow(F.lit(10.0), gap / F.lit(400.0)))
@@ -47,7 +51,7 @@ def build_coupon_predictions(
     return (
         coupon.join(elo, on="match_id", how="left")
         .withColumn(
-            "elo_prob_1", elo_probability(F.col("elo_home"), F.col("elo_away"))
+            "elo_expected_score", expected_home_score_column(F.col("elo_home"), F.col("elo_away"))
         )
         .select(
             "draw_number",
@@ -66,7 +70,7 @@ def build_coupon_predictions(
             "calibrated_2",
             "elo_home",
             "elo_away",
-            "elo_prob_1",
+            "elo_expected_score",
         )
         .orderBy("event_number")
     )
