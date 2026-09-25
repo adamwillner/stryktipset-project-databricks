@@ -117,9 +117,10 @@ erDiagram
 | 04 | `gold_fact_match` | 🥇 | join dims, derive keys, goals & odds → `fact_match` | ✅ |
 | 05 | `gold_add_calibration` | 🥇 | isotonic fit, MLflow log, merged into `fact_match` | ✅ |
 | 06 | `gold_elo` | 🥇 | pre-match Elo ratings, merged into `fact_match` | ✅ |
-| 07 | `gold_fact_player_season` | 🥇 | player stats (stretch goal) | ⬜ |
+| 07 | `score_coupon` | 🥇 | score the open coupon into `coupon_predictions` | ✅ |
+| 08 | `gold_fact_player_season` | 🥇 | player stats (stretch goal) | ⬜ |
 
-`01`–`06` chain into one Databricks Job, which reads the notebooks **from GitHub** (`main`) rather than from the Databricks Git folder — so only committed and pushed code ever runs on the schedule. `00` is one-time setup and isn't a task in the Job. `07` waits until player-stats sourcing is worked out.
+`01`–`07` chain into one Databricks Job, which reads the notebooks **from GitHub** (`main`) rather than from the Databricks Git folder — so only committed and pushed code ever runs on the schedule. `00` is one-time setup and isn't a task in the Job. `07` scores the open coupon into `gold.coupon_predictions`. `08` waits until player-stats sourcing is worked out.
 
 ## Code layout
 

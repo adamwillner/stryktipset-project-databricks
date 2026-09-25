@@ -33,8 +33,10 @@ def test_build_elo(spark):
           ("m2", "2024-01-08T15:00:00", "A", "C", 1, 1, "X"),
           # B hosts A -- B's rating here reflects m1 only
           ("m3", "2024-01-15T15:00:00", "B", "A", 0, 1, "2"),
-          # not played yet: silver labels this '2' even though nothing happened
-          ("m4", "2024-02-01T15:00:00", "D", "E", None, None, "2"),
+          # not played: silver leaves result null for these
+          ("m4", "2024-02-01T15:00:00", "D", "E", None, None, None),
+          # and a second unplayed one for the same teams, later
+          ("m5", "2024-02-08T15:00:00", "D", "E", None, None, None),
       ],
       MATCHES_SCHEMA,
   )
@@ -42,9 +44,10 @@ def test_build_elo(spark):
   result = build_elo(matches)
   rows = {row["match_id"]: row for row in result.collect()}
 
-  # the unplayed fixture must not reach the ratings
-  assert "m4" not in rows
-  assert result.count() == 3
+  # unplayed fixtures are rated too -- that is what makes Elo usable as a
+  # predictor for a coupon that hasn't been played yet
+  assert result.count() == 5
+  assert "m4" in rows
 
   # every team starts level, and m1 is both teams' first match
   assert rows["m1"]["elo_home"] == INITIAL_RATING
@@ -62,3 +65,9 @@ def test_build_elo(spark):
 
   # C has not played before m2, so it is still exactly at the start
   assert rows["m2"]["elo_away"] == INITIAL_RATING
+
+  # an unplayed match must not teach the ratings anything: m5 sees exactly
+  # what m4 saw, even though m4 came first
+  assert rows["m4"]["elo_home"] == INITIAL_RATING
+  assert rows["m5"]["elo_home"] == rows["m4"]["elo_home"]
+  assert rows["m5"]["elo_away"] == rows["m4"]["elo_away"]

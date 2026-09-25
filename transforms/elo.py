@@ -1,6 +1,6 @@
 """Pure transform functions used by 06_gold_elo."""
 
-from pyspark.sql import DataFrame, functions as F
+from pyspark.sql import DataFrame
 
 INITIAL_RATING = 1500.0
 K_FACTOR = 20.0
@@ -25,36 +25,30 @@ def expected_home_score(home_rating: float, away_rating: float) -> float:
 
 
 def build_elo(matches: DataFrame) -> DataFrame:
-    """One row per played match: match_id plus both teams' ratings *as
-    they stood before kick-off*.
+    """One row per match: match_id plus both teams' ratings as they stood
+    before kick-off.
 
-    `matches` must already be scoped to the gold leagues -- 06 inner-joins
-    dim_league first, the same way build_fact_match does, so the
-    England/Sweden league list stays in dimensions.py and isn't
-    duplicated here.
+    Every match in the input feeds the ratings -- all tiers, all countries,
+    one pool. That is what keeps divisions comparable (a relegated team
+    carries its rating down with it) and what lets a coupon containing
+    Eliteserien or La Liga be scored at all.
 
-    Pre-match, not post-match. The stored rating is what was knowable on
-    the morning of the match; storing the rating after the result has
+    Played and unplayed matches are both returned. A played match records
+    the pre-match ratings and then applies its result; an unplayed one
+    records the ratings as they currently stand and changes nothing,
+    because there is no result to learn from. That is what makes a rating
+    usable as a predictor for next week's coupon, and it also handles a
+    postponed fixture sitting in the middle of history.
+
+    Pre-match, never post-match: storing the rating after the result had
     been applied would leak the outcome into the feature, and a model
     trained on it would look excellent and predict nothing.
 
-    Unplayed fixtures are dropped on home_goals/away_goals rather than
-    on `result`. Silver nulls `result` for them now, so either would
-    work, but the goal columns are the direct evidence that a match was
-    played and don't depend on a derived column staying correct.
-
-    Sequential by nature -- each match depends on both teams' entire
-    history in order -- so this is a plain loop over a pandas frame
-    rather than a column expression. All tiers are rated in one pool,
-    which is what keeps divisions on a comparable scale: a relegated team
-    carries its rating down with it.
+    Sequential by nature -- each match depends on every match before it --
+    so this is a plain loop over a pandas frame, not a column expression.
     """
-    played = matches.filter(
-        F.col('home_goals').isNotNull() & F.col('away_goals').isNotNull()
-    )
-
     pdf = (
-        played
+        matches
         .select('match_id', 'match_start', 'home_team', 'away_team', 'result')
         .toPandas()
         .sort_values(['match_start', 'match_id'], kind='mergesort')
@@ -67,13 +61,15 @@ def build_elo(matches: DataFrame) -> DataFrame:
         home_before = ratings.get(match.home_team, INITIAL_RATING)
         away_before = ratings.get(match.away_team, INITIAL_RATING)
 
-        # recorded BEFORE the update -- this is the whole point
+        # recorded BEFORE any update -- this is the whole point
         rows.append((match.match_id, home_before, away_before))
+
+        if match.result not in ACTUAL_SCORE:
+            continue  # not played (or postponed): rate it, learn nothing
 
         change = K_FACTOR * (
             ACTUAL_SCORE[match.result] - expected_home_score(home_before, away_before)
         )
-
         ratings[match.home_team] = home_before + change
         ratings[match.away_team] = away_before - change
 
