@@ -90,11 +90,6 @@ def test_build_dim_league(spark):
   assert rows['PREMIER LEAGUE']['league_name'] == 'Premier League'
   assert rows['LEAGUE TWO']['league_name'] == 'League Two'
 
-  # an Unknown member is always present, so a coupon match from a league
-  # outside gold's scope still gets a real key instead of a null one
-  assert 'UNKNOWN' in rows
-  assert rows['UNKNOWN']['country'] is None
-
   # surrogate keys are derived from the business key, so they are stable
   # across rebuilds and distinct per league
   assert rows['PREMIER LEAGUE']['league_sk'] == league_surrogate_key_value('Premier League')

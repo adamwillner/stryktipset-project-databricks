@@ -29,8 +29,6 @@ LEAGUE_COUNTRY = {
     "National League": "England",
 }
 
-UNKNOWN_LEAGUE_NAME = "Unknown"
-
 def team_surrogate_key(team_name: Column) -> Column:
     """The single place team_sk is derived.
 
@@ -131,18 +129,14 @@ def build_dim_league(df: DataFrame) -> DataFrame:
 
     Columns: league_sk, league_key, league_name, country.
 
-    Carries an Unknown member so a row for a league outside gold's scope
-    still gets a real foreign key instead of a null one. Every fact row
-    stays joinable, and "outside scope" shows up in a group-by rather than
-    quietly vanishing.
+    No Unknown member. One was added on 2026-09-29 so mart.coupon could
+    give out-of-scope leagues a real key rather than a null one, and
+    removed the same day once the mart dropped its surrogate keys -- with
+    no fact referencing it, it was machinery with no consumer. Add it back
+    if a fact ever needs a non-null league for something outside gold.
     """
-    unknown = df.sparkSession.createDataFrame(
-        [(UNKNOWN_LEAGUE_NAME, None)], 'league_name string, country string'
-    )
-
     return (
         df.select('league_name', 'country')
-        .union(unknown)
         .withColumn('league_key', F.upper('league_name'))
         .dropDuplicates(['league_key'])
         .withColumn('league_sk', league_surrogate_key(F.col('league_name')))

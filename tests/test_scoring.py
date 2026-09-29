@@ -1,7 +1,6 @@
 from pyspark.sql import functions as F
 
 from transforms.elo import expected_home_score
-from transforms.dimensions import build_dim_league
 from transforms.scoring import build_mart_coupon, expected_home_score_column
 
 MATCHES_SCHEMA = (
@@ -44,13 +43,7 @@ def test_build_mart_coupon(spark):
       "match_id string, elo_home double, elo_away double",
   )
 
-  dim_league = build_dim_league(
-      spark.createDataFrame(
-          [("Premier League", "England")], 'league_name string, country string'
-      )
-  )
-
-  result = build_mart_coupon(matches, elo, dim_league, 4971)
+  result = build_mart_coupon(matches, elo, 4971)
   rows = result.collect()
 
   assert [row["match_key"] for row in rows] == ["m1", "m2"]  # ordered by event_number
@@ -61,12 +54,14 @@ def test_build_mart_coupon(spark):
   assert keyed["m2"]["home_team"] == "Arsenal"
   assert keyed["m2"]["league"] == "Premier League"
 
-  # and still joinable: an out-of-scope league resolves to the Unknown
-  # member rather than to a null foreign key
-  unknown_sk = {r["league_key"]: r["league_sk"] for r in dim_league.collect()}["UNKNOWN"]
+  # a league outside gold's scope still appears, named -- the mart covers
+  # the whole coupon even where the star does not
   assert keyed["m1"]["league"] == "Eliteserien"
-  assert keyed["m1"]["league_sk"] == unknown_sk
-  assert keyed["m2"]["league_sk"] != unknown_sk
+
+  # no surrogate keys here: the only join this table is for is predictions
+  # against results, and that goes through match_key
+  assert "league_sk" not in result.columns
+  assert "home_team_sk" not in result.columns
   assert abs(keyed["m2"]["elo_expected_score"] - expected_home_score(1700.0, 1500.0)) < 1e-9
 
   # a match with no Elo still appears rather than being dropped -- an

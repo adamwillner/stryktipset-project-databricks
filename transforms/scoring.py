@@ -2,12 +2,6 @@
 
 from pyspark.sql import Column, DataFrame, functions as F
 
-from transforms.dimensions import (
-    UNKNOWN_LEAGUE_NAME,
-    date_key,
-    league_surrogate_key,
-    team_surrogate_key,
-)
 from transforms.elo import HOME_ADVANTAGE
 
 
@@ -30,9 +24,7 @@ def expected_home_score_column(home_rating: Column, away_rating: Column) -> Colu
     return F.lit(1.0) / (F.lit(1.0) + F.pow(F.lit(10.0), gap / F.lit(400.0)))
 
 
-def build_mart_coupon(
-    matches: DataFrame, elo: DataFrame, dim_league: DataFrame, draw_number: int
-) -> DataFrame:
+def build_mart_coupon(matches: DataFrame, elo: DataFrame, draw_number: int) -> DataFrame:
     """One row per match on a given draw, carrying every opinion available
     about it: the crowd (`streck_*`), the crowd corrected for its known
     biases (`calibrated_*`), and Elo.
@@ -41,8 +33,13 @@ def build_mart_coupon(
     records what happened; these are model outputs, read by a person on a
     Thursday. Being denormalised is the point of a mart, so team and league
     names are carried as plain text -- SELECT * reads like a coupon with no
-    join. The surrogate keys are carried too, so it can still be joined
-    back to the dimensions when you want to aggregate.
+    join.
+
+    It carries no surrogate keys. They were here briefly, justified by
+    joining back to the dimensions, but the only join this table is
+    actually for is predictions against results -- and that goes through
+    match_key. Anything deeper is reachable by joining through match_key
+    on the rare occasion it is wanted.
 
     Reads silver rather than fact_match on purpose. Gold covers the English
     leagues only, but a coupon regularly carries Norwegian, Scottish or
@@ -59,24 +56,9 @@ def build_mart_coupon(
     """
     coupon = matches.filter(F.col("draw_number") == draw_number)
 
-    scoped_league = dim_league.select(
-        F.col("league_name").alias("_league_name"), F.col("league_sk").alias("_league_sk")
-    )
-
     return (
         coupon.join(elo, on="match_id", how="left")
-        .join(scoped_league, on=coupon["league"] == scoped_league["_league_name"], how="left")
         .withColumn("match_key", F.col("match_id"))
-        .withColumn("home_team_sk", team_surrogate_key(F.col("home_team")))
-        .withColumn("away_team_sk", team_surrogate_key(F.col("away_team")))
-        .withColumn("date_key", date_key(F.col("match_start")))
-        .withColumn(
-            "league_sk",
-            F.coalesce(
-                F.col("_league_sk"),
-                league_surrogate_key(F.lit(UNKNOWN_LEAGUE_NAME)),
-            ),
-        )
         .withColumn(
             "elo_expected_score",
             expected_home_score_column(F.col("elo_home"), F.col("elo_away")),
@@ -91,10 +73,6 @@ def build_mart_coupon(
             "away_team",
             "league",
             "status",
-            "home_team_sk",
-            "away_team_sk",
-            "date_key",
-            "league_sk",
             "streck_1",
             "streck_x",
             "streck_2",
