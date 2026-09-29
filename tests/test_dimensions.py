@@ -1,34 +1,12 @@
 from datetime import date
 
-import pytest
-from pyspark.sql import functions as F
-
 from transforms.dimensions import (
     LEAGUE_COUNTRY,
     build_dim_team,
     build_dim_date,
     build_dim_league,
     build_dim_season,
-    build_dim_team_scd2,
-    league_surrogate_key,
-    team_surrogate_key,
 )
-
-
-def _key(fn, value):
-  """Evaluate a surrogate-key expression on a one-row DataFrame, so the
-  test checks the real function rather than restating the hash."""
-  from pyspark.sql import SparkSession
-  spark = SparkSession.builder.getOrCreate()
-  return spark.range(1).select(fn(F.lit(value)).alias("k")).first()["k"]
-
-
-def team_surrogate_key_value(name):
-  return _key(team_surrogate_key, name)
-
-
-def league_surrogate_key_value(name):
-  return _key(league_surrogate_key, name)
 
 def test_build_dim_team(spark):
   df = spark.createDataFrame(
@@ -47,11 +25,6 @@ def test_build_dim_team(spark):
 
   assert rows['ARSENAL']['team_name'] == 'Arsenal'
   assert rows['CHELSEA']['team_name'] == 'Chelsea'
-
-  # the surrogate key is a hash of the business key, so it is the same on
-  # every rebuild and different per team
-  assert rows['ARSENAL']['team_sk'] == team_surrogate_key_value('Arsenal')
-  assert rows['ARSENAL']['team_sk'] != rows['CHELSEA']['team_sk']
 
   # ids are not stable across the history, so the newest row wins
   assert rows['ARSENAL']['team_id'] == 69
@@ -90,10 +63,6 @@ def test_build_dim_league(spark):
   assert rows['PREMIER LEAGUE']['league_name'] == 'Premier League'
   assert rows['LEAGUE TWO']['league_name'] == 'League Two'
 
-  # surrogate keys are derived from the business key, so they are stable
-  # across rebuilds and distinct per league
-  assert rows['PREMIER LEAGUE']['league_sk'] == league_surrogate_key_value('Premier League')
-  assert rows['PREMIER LEAGUE']['league_sk'] != rows['LEAGUE TWO']['league_sk']
 
 def test_build_dim_season(spark):
   df = spark.createDataFrame(
@@ -129,20 +98,3 @@ def test_league_country_is_english_only():
   which was deliberately collapsed to the England shape."""
   assert set(LEAGUE_COUNTRY.values()) == {"England"}
   assert len(LEAGUE_COUNTRY) == 5
-
-
-@pytest.mark.skip(reason="SCD Type 2 not implemented -- see build_dim_team_scd2")
-def test_build_dim_team_scd2(spark):
-  """Three cases to assert once it exists:
-
-  1. attributes unchanged -> one row, still is_current, valid_to still null
-  2. team_name changed    -> two rows for that team: the old one closed
-                             (is_current False, valid_to set) and a new
-                             current one; a fact row dated before the change
-                             must still join to the old version
-  3. brand new team       -> one row, is_current True, valid_to null
-
-  And the trap: team_sk must differ between the two versions, or they
-  collide on the same key and the history is unreachable.
-  """
-  build_dim_team_scd2(None, None)

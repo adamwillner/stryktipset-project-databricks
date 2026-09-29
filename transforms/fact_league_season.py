@@ -14,13 +14,13 @@ def build_fact_league_season(fact_match: DataFrame) -> DataFrame:
     Played matches only. An unplayed fixture has a null result and null
     goals, and counting it would quietly understate every rate below.
 
-    Grain: league_sk + season_key.
+    Grain: league_key + season_key.
     """
     played = fact_match.filter(F.col('result').isNotNull())
     goals = F.col('home_goals') + F.col('away_goals')
 
     return (
-        played.groupBy('league_sk', 'season_key')
+        played.groupBy('league_key', 'season_key')
         .agg(
             F.count('*').alias('match_count'),
             F.sum(goals).alias('total_goals'),

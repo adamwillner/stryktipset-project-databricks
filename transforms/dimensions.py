@@ -29,22 +29,6 @@ LEAGUE_COUNTRY = {
     "National League": "England",
 }
 
-def team_surrogate_key(team_name: Column) -> Column:
-    """The single place team_sk is derived.
-
-    build_dim_team and build_fact_match both need it, and if the two ever
-    disagreed every fact row would point at a team that does not exist --
-    silently, since a hash always produces *some* number. One function, so
-    they cannot drift.
-    """
-    return F.xxhash64(F.upper(team_name))
-
-
-def league_surrogate_key(league_name: Column) -> Column:
-    """The single place league_sk is derived -- see team_surrogate_key."""
-    return F.xxhash64(F.upper(league_name))
-
-
 def date_key(match_start: Column) -> Column:
     """The single place date_key is derived.
 
@@ -93,8 +77,7 @@ def build_dim_team(df: DataFrame) -> DataFrame:
         .withColumn('team_key', F.upper('team_name'))
         .withColumn('row_num', F.row_number().over(newest_per_team))
         .filter(F.col('row_num') == 1)
-        .withColumn('team_sk', team_surrogate_key(F.col('team_name')))
-        .select('team_sk', 'team_key', 'team_name', 'team_id', 'country')
+        .select('team_key', 'team_name', 'team_id', 'country')
     )
 
 
@@ -139,8 +122,7 @@ def build_dim_league(df: DataFrame) -> DataFrame:
         df.select('league_name', 'country')
         .withColumn('league_key', F.upper('league_name'))
         .dropDuplicates(['league_key'])
-        .withColumn('league_sk', league_surrogate_key(F.col('league_name')))
-        .select('league_sk', 'league_key', 'league_name', 'country')
+        .select('league_key', 'league_name', 'country')
     )
 
 
@@ -185,47 +167,3 @@ def build_dim_season(df: DataFrame) -> DataFrame:
         .drop('match_start', 'season_start_year')
         .dropDuplicates(['season_key'])
     )
-
-
-def build_dim_team_scd2(current: DataFrame, incoming: DataFrame) -> DataFrame:
-    """NOT IMPLEMENTED -- left as an exercise.
-
-    build_dim_team above is a Slowly Changing Dimension of Type 1: it keeps
-    the newest row per team and overwrites the rest. So when a team's name
-    changes, the old name is simply gone, and a match played in 2015 shows
-    up under the name that team carries today.
-
-    Type 2 keeps one row per *version* of a team instead:
-
-        team_key   team_name    valid_from   valid_to     is_current
-        ARSENAL    Arsenal      2013-01-01   2026-03-01   false
-        ARSENAL    Arsenal FC   2026-03-01   null         true
-
-    and a fact row points at whichever version was current when that match
-    was played, so history keeps reading the way it did at the time.
-
-    The merge, for each incoming team:
-      - attributes unchanged -> leave the current row alone
-      - attributes changed   -> close the current row (valid_to = today,
-                                is_current = False) and insert a new one
-                                (valid_from = today, valid_to = null,
-                                is_current = True)
-      - team not seen before -> insert with valid_from = first seen,
-                                valid_to = null, is_current = True
-
-    Two things to get right:
-
-    1. team_sk must hash (team_key, valid_from), not team_key alone. Two
-       versions of Arsenal would otherwise land on the same surrogate key,
-       which defeats the entire point of having one.
-    2. Decide which attribute changes deserve a new version. A name change,
-       yes. A corrected country, probably not -- that is fixing a wrong
-       value rather than recording a change in the world, so it belongs as
-       a Type 1 overwrite on the existing row. Get this wrong and the table
-       fills with versions that mean nothing.
-
-    Note the `current` argument: build_dim_team rebuilds from silver alone
-    and has no history to compare against. A Type 2 build has to read the
-    existing dimension to know what changed.
-    """
-    raise NotImplementedError("SCD Type 2 merge -- see docstring")

@@ -2,7 +2,7 @@
 
 from pyspark.sql import DataFrame, functions as F
 
-from transforms.dimensions import date_key, team_surrogate_key
+from transforms.dimensions import date_key
 
 
 def build_fact_match(matches: DataFrame, dim_league: DataFrame) -> DataFrame:
@@ -10,11 +10,11 @@ def build_fact_match(matches: DataFrame, dim_league: DataFrame) -> DataFrame:
     what scopes gold to the English leagues, since dim_league holds only
     those. Derive the surrogate keys, bring across goals and odds.
 
-    Facts carry surrogate keys only: home_team_sk, away_team_sk, league_sk.
-    Team and league names live in the dimensions, so a name is corrected in
-    one place. The cost is that SELECT * here is unreadable and you have to
-    join dim_team to see who played -- deliberate, and mart.coupon is the
-    readable surface.
+    Keys are the natural ones: home_team_key/away_team_key are the
+    uppercased team names, league_key the uppercased league name. Surrogate
+    keys were tried on 2026-09-29 and removed the same day -- see
+    project-context for the evidence. Short version: they only pay off with
+    SCD Type 2 versioning, and team names in this data have never changed.
 
     calibrated_1/x/2 and elo_home/elo_away are created here as null
     placeholders and filled in later by 05 and 06 -- Delta resolves a named
@@ -37,8 +37,8 @@ def build_fact_match(matches: DataFrame, dim_league: DataFrame) -> DataFrame:
     return (
         joined_df
         .withColumn('match_key', F.col('match_id'))
-        .withColumn('home_team_sk', team_surrogate_key(F.col('home_team')))
-        .withColumn('away_team_sk', team_surrogate_key(F.col('away_team')))
+        .withColumn('home_team_key', F.upper(F.col('home_team')))
+        .withColumn('away_team_key', F.upper(F.col('away_team')))
         .withColumn('date_key', date_key(F.col('match_start')))
         .withColumn(
             'season_key',
@@ -50,10 +50,10 @@ def build_fact_match(matches: DataFrame, dim_league: DataFrame) -> DataFrame:
         )
         .select(
             F.col('match_key'),
-            F.col('home_team_sk'),
-            F.col('away_team_sk'),
+            F.col('home_team_key'),
+            F.col('away_team_key'),
             F.col('date_key'),
-            F.col('league_sk'),
+            F.col('league_key'),
             F.col('season_key'),
             F.col('home_goals'),
             F.col('away_goals'),

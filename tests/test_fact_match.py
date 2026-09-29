@@ -1,4 +1,4 @@
-from transforms.dimensions import build_dim_league, team_surrogate_key
+from transforms.dimensions import build_dim_league
 from transforms.fact_match import build_fact_match
 
 MATCHES_SCHEMA = (
@@ -47,11 +47,10 @@ def test_build_fact_match(spark):
   assert "m4" not in rows
   assert result.count() == 3
 
-  # facts carry surrogate keys only -- names live in the dimensions
-  assert "home_team_key" not in result.columns
-  assert rows["m1"]["home_team_sk"] != rows["m1"]["away_team_sk"]
+  assert rows["m1"]["home_team_key"] == "ARSENAL"
+  assert rows["m1"]["away_team_key"] == "CHELSEA"
   assert rows["m1"]["date_key"] == 20240815
-  assert rows["m1"]["league_sk"] is not None
+  assert rows["m1"]["league_key"] == "PREMIER LEAGUE"
 
   assert rows["m1"]["season_key"] == "2024/2025"
   assert rows["m2"]["season_key"] == "2023/2024"

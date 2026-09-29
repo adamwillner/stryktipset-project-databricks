@@ -39,7 +39,7 @@ The table accumulates every week, so these predictions can eventually be joined 
 
 `fact_match` covers the **five English tiers only** — Premier League down to National League. Sweden was dropped on 2026-09-29 (see project-context.md). Everything else in the raw data stays in silver and is scored by `07` instead, but never reaches gold.
 
-Facts carry **surrogate keys**, not names: `home_team_sk` rather than `ARSENAL`. Rename a team and only the dimension changes, instead of orphaning every historical fact row. The keys are hashes of the business key rather than a counter, because these tables are rebuilt from scratch every run and a counter would hand out different numbers each time. `date_key` and `season_key` stay readable, which is the usual exception for date-like dimensions.
+Keys are the natural ones — `home_team_key` is the uppercased team name, `league_key` the uppercased league name. Surrogate keys were tried and removed the same day; see project-context.md for the evidence.
 
 `elo_home`/`elo_away` hold each team's rating **as it stood before kick-off**, computed by `06` — pre-match, so it can be used as a predictor without leaking the result. The ratings themselves are built from *every* match in silver, not just the scoped ones, so a Norwegian or Spanish side on the coupon still has a rating.
 
@@ -61,8 +61,7 @@ erDiagram
     DIM_SEASON ||--o{ FACT_PLAYER_SEASON : "season"
 
     DIM_TEAM {
-        bigint team_sk PK
-        string team_key
+        string team_key PK
         string team_name
         int team_id
         string country
@@ -81,8 +80,7 @@ erDiagram
         boolean is_weekend
     }
     DIM_LEAGUE {
-        bigint league_sk PK
-        string league_key
+        string league_key PK
         string league_name
         string country
     }
@@ -101,10 +99,10 @@ erDiagram
     }
     FACT_MATCH {
         string match_key PK
-        bigint home_team_sk FK
-        bigint away_team_sk FK
+        string home_team_key FK
+        string away_team_key FK
         int date_key FK
-        bigint league_sk FK
+        string league_key FK
         string season_key FK
         int home_goals
         int away_goals
@@ -130,7 +128,7 @@ erDiagram
         float elo_away "pre-match rating"
     }
     FACT_LEAGUE_SEASON {
-        bigint league_sk FK
+        string league_key FK
         string season_key FK
         int match_count
         int total_goals
@@ -142,7 +140,7 @@ erDiagram
     }
     FACT_PLAYER_SEASON {
         string player_key FK
-        bigint team_sk FK
+        string team_key FK
         string season_key FK
         int appearances
         int goals
@@ -183,8 +181,6 @@ uv pip install --python ~/venvs/stryktipset/bin/python -r requirements-dev.txt
 After that, `./run-tests.sh` from WSL runs all 17 tests in about 40 seconds. Local Spark is *classic* Spark, not the Spark Connect session Free Edition gives you, so it's a fast inner loop on `transforms/` — not a replacement for running the suite in a notebook before trusting a pipeline change.
 
 Test coverage so far: `transforms/silver.py` and `transforms/dimensions.py` are fully tested; `transforms/calibration.py`'s deterministic pieces are tested (the statistical fit itself is checked for shape — non-decreasing, stays in [0, 1] — not exact values); `transforms/fact_match.py` is tested too — scoping drop-out, the derived keys, the three season-key shapes, and the null `calibrated_*`/`elo_*` placeholders. `transforms/elo.py` covers the rating curve, and that ratings come back pre-match, zero-sum, and that an unplayed fixture is rated without teaching the ratings anything. `transforms/scoring.py` covers draw selection, a match with no Elo staying visible rather than being dropped, an out-of-scope league still appearing by name, and that its column-expression copy of the Elo formula agrees with the float one. `transforms/fact_league_season.py` covers the aggregation and that unplayed fixtures are excluded from every rate.
-
-One test is **skipped**: `test_build_dim_team_scd2`, against a deliberate `NotImplementedError` stub. `dim_team` is currently a Type 1 slowly changing dimension — the newest row wins and history is overwritten — and the stub documents what Type 2 would take.
 
 ## Stack
 
