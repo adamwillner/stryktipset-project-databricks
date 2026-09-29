@@ -7,13 +7,13 @@
 ```mermaid
 flowchart LR
     A["🥉 Bronze<br/>raw JSON<br/>Volume"] --> B["🥈 Silver<br/>PySpark<br/>matches table"]
-    B --> C["🥇 Gold<br/>star schema<br/>England + Sweden"]
-    B --> D["🎯 coupon_predictions<br/>this week's 13 matches<br/>every league"]
+    B --> C["🥇 Gold<br/>star schema<br/>English leagues only"]
+    B --> D["🎯 Mart<br/>this week's 13 matches<br/>every league"]
 ```
 
 ## Scoring a coupon
 
-`07_score_coupon` writes one row per match per draw into `gold.coupon_predictions`, putting three independent opinions side by side: what the public bet (`streck_*`), the same corrected for the crowd's known biases (`calibrated_*`), and Elo.
+`07_score_coupon` writes one row per match per draw into `mart.coupon`, putting three independent opinions side by side: what the public bet (`streck_*`), the same corrected for the crowd's known biases (`calibrated_*`), and Elo.
 
 ```
 draw 4972 — 13 matches
@@ -29,15 +29,21 @@ The `elo xs` column is `elo_expected_score` in the table — an expected *score*
 
 `gap` is where the crowd and the ratings disagree, which is the only place there's anything to learn — agreeing with the crowd tells you nothing you didn't already know. Both sides are *expected scores* (Elo counts a draw as half a win), so the crowd is converted with `streck_1 + streck_x / 2` before comparing; subtracting `streck_1` directly would bake in half the draw probability.
 
-It reads **silver, not gold**. Gold is scoped to England and Sweden, but around 16% of coupon matches aren't — draw 4972 had two UEFA Nations League fixtures and no Premier League at all. The table accumulates every week, so these predictions can eventually be joined back to results and scored.
+It reads **silver, not gold**, and lives in a **mart** rather than the star. Gold holds English league football; a coupon does not — draw 4972 had two UEFA Nations League fixtures and no Premier League at all. A star schema also records what happened, and these are model outputs, so they get their own layer.
+
+Being denormalised is the point of a mart: team and league names are carried as text, so `SELECT *` reads like a coupon with no join. The surrogate keys are there too, so it can still be joined back to the dimensions. Leagues outside gold resolve to `dim_league`'s Unknown member rather than to a null key.
+
+The table accumulates every week, so these predictions can eventually be joined back to results and scored.
 
 ## Gold layer — star schema
 
-`fact_match` is scoped to English and Swedish domestic leagues only (see project-context.md) — everything else in the raw data (cups, European competitions, national teams, other countries) stays in silver and is scored by `07` instead, but never reaches gold.
+`fact_match` covers the **five English tiers only** — Premier League down to National League. Sweden was dropped on 2026-09-29 (see project-context.md). Everything else in the raw data stays in silver and is scored by `07` instead, but never reaches gold.
+
+Facts carry **surrogate keys**, not names: `home_team_sk` rather than `ARSENAL`. Rename a team and only the dimension changes, instead of orphaning every historical fact row. The keys are hashes of the business key rather than a counter, because these tables are rebuilt from scratch every run and a counter would hand out different numbers each time. `date_key` and `season_key` stay readable, which is the usual exception for date-like dimensions.
 
 `elo_home`/`elo_away` hold each team's rating **as it stood before kick-off**, computed by `06` — pre-match, so it can be used as a predictor without leaking the result. The ratings themselves are built from *every* match in silver, not just the scoped ones, so a Norwegian or Spanish side on the coupon still has a rating.
 
-xG has no column: no free data source covers this league mix, which runs from the Premier League down to Swedish Division 2.
+xG has no column: no free source covers the lower English tiers.
 
 ```mermaid
 erDiagram
@@ -47,12 +53,16 @@ erDiagram
     DIM_LEAGUE ||--o{ FACT_MATCH : "league"
     DIM_SEASON ||--o{ FACT_MATCH : "season"
 
+    DIM_LEAGUE ||--o{ FACT_LEAGUE_SEASON : "league"
+    DIM_SEASON ||--o{ FACT_LEAGUE_SEASON : "season"
+
     DIM_PLAYER ||--o{ FACT_PLAYER_SEASON : "player"
     DIM_TEAM ||--o{ FACT_PLAYER_SEASON : "team"
     DIM_SEASON ||--o{ FACT_PLAYER_SEASON : "season"
 
     DIM_TEAM {
-        string team_key PK
+        bigint team_sk PK
+        string team_key
         string team_name
         int team_id
         string country
@@ -71,7 +81,8 @@ erDiagram
         boolean is_weekend
     }
     DIM_LEAGUE {
-        string league_key PK
+        bigint league_sk PK
+        string league_key
         string league_name
         string country
     }
@@ -90,10 +101,10 @@ erDiagram
     }
     FACT_MATCH {
         string match_key PK
-        string home_team_key FK
-        string away_team_key FK
+        bigint home_team_sk FK
+        bigint away_team_sk FK
         int date_key FK
-        string league_key FK
+        bigint league_sk FK
         string season_key FK
         int home_goals
         int away_goals
@@ -118,9 +129,20 @@ erDiagram
         float elo_home "pre-match rating"
         float elo_away "pre-match rating"
     }
+    FACT_LEAGUE_SEASON {
+        bigint league_sk FK
+        string season_key FK
+        int match_count
+        int total_goals
+        float avg_goals
+        int home_wins
+        int draws
+        int away_wins
+        float home_win_rate
+    }
     FACT_PLAYER_SEASON {
         string player_key FK
-        string team_key FK
+        bigint team_sk FK
         string season_key FK
         int appearances
         int goals
@@ -141,14 +163,14 @@ erDiagram
 | 04 | `gold_fact_match` | 🥇 | join dims, derive keys, goals & odds → `fact_match` | ✅ |
 | 05 | `gold_calibrate` | 🥇 | isotonic fit, MLflow log, merged into `fact_match` | ✅ |
 | 06 | `gold_elo` | 🥇 | pre-match Elo ratings, merged into `fact_match` | ✅ |
-| 07 | `score_coupon` | 🥇 | score the open coupon into `coupon_predictions` | ✅ |
+| 07 | `score_coupon` | 🎯 | score the open coupon into `mart.coupon` | ✅ |
 | 08 | `gold_fact_player_season` | 🥇 | player stats (stretch goal) | ⬜ |
 
-`01`–`07` chain into one Databricks Job, which reads the notebooks **from GitHub** (`main`) rather than from the Databricks Git folder — so only committed and pushed code ever runs on the schedule. `00` is one-time setup and isn't a task in the Job. `07` scores the open coupon into `gold.coupon_predictions`. `08` waits until player-stats sourcing is worked out.
+`01`–`07` chain into one Databricks Job, which reads the notebooks **from GitHub** (`main`) rather than from the Databricks Git folder — so only committed and pushed code ever runs on the schedule. `00` is one-time setup and isn't a task in the Job. `07` scores the open coupon into `mart.coupon`. `08` waits until player-stats sourcing is worked out.
 
 ## Code layout
 
-Transform functions live in `transforms/` (`silver.py`, `dimensions.py`, `fact_match.py`, `calibration.py`, `elo.py`, `scoring.py`), not inline in the notebooks — notebooks `02`–`07` just import from there and orchestrate (read tables, call the transform, write the result). This keeps the actual logic importable and testable with plain `pytest` (see `tests/`).
+Transform functions live in `transforms/` (`silver.py`, `dimensions.py`, `fact_match.py`, `fact_league_season.py`, `calibration.py`, `elo.py`, `scoring.py`), not inline in the notebooks — notebooks `02`–`07` just import from there and orchestrate (read tables, call the transform, write the result). This keeps the actual logic importable and testable with plain `pytest` (see `tests/`).
 
 `pytest` runs from inside a Databricks notebook (`%pip install pytest` in its own cell, then `pytest.main(["tests"])` in the next) — Free Edition is serverless-only, so there's no local Spark to spin up for tests; `tests/conftest.py`'s `spark` fixture reuses whichever Spark Connect session the notebook already has.
 Locally, the suite runs in **WSL (Ubuntu)**, not on Windows — PySpark's JVM can't open a loopback pipe on this machine. One-time setup inside WSL, no sudo needed (`uv` and a Temurin JDK 17 both install into `~`):
@@ -158,9 +180,11 @@ uv venv ~/venvs/stryktipset --python 3.12
 uv pip install --python ~/venvs/stryktipset/bin/python -r requirements-dev.txt
 ```
 
-After that, `./run-tests.sh` from WSL runs all 15 tests in about 40 seconds. Local Spark is *classic* Spark, not the Spark Connect session Free Edition gives you, so it's a fast inner loop on `transforms/` — not a replacement for running the suite in a notebook before trusting a pipeline change.
+After that, `./run-tests.sh` from WSL runs all 17 tests in about 40 seconds. Local Spark is *classic* Spark, not the Spark Connect session Free Edition gives you, so it's a fast inner loop on `transforms/` — not a replacement for running the suite in a notebook before trusting a pipeline change.
 
-Test coverage so far: `transforms/silver.py` and `transforms/dimensions.py` are fully tested; `transforms/calibration.py`'s deterministic pieces are tested (the statistical fit itself is checked for shape — non-decreasing, stays in [0, 1] — not exact values); `transforms/fact_match.py` is tested too — scoping drop-out, the derived keys, the three season-key shapes, and the null `calibrated_*`/`elo_*` placeholders. `transforms/elo.py` covers the rating curve, and that ratings come back pre-match, zero-sum, and that an unplayed fixture is rated without teaching the ratings anything. `transforms/scoring.py` covers draw selection, a match with no Elo staying visible rather than being dropped, and that its column-expression copy of the Elo formula agrees with the float one.
+Test coverage so far: `transforms/silver.py` and `transforms/dimensions.py` are fully tested; `transforms/calibration.py`'s deterministic pieces are tested (the statistical fit itself is checked for shape — non-decreasing, stays in [0, 1] — not exact values); `transforms/fact_match.py` is tested too — scoping drop-out, the derived keys, the three season-key shapes, and the null `calibrated_*`/`elo_*` placeholders. `transforms/elo.py` covers the rating curve, and that ratings come back pre-match, zero-sum, and that an unplayed fixture is rated without teaching the ratings anything. `transforms/scoring.py` covers draw selection, a match with no Elo staying visible rather than being dropped, an out-of-scope league resolving to the Unknown member, and that its column-expression copy of the Elo formula agrees with the float one. `transforms/fact_league_season.py` covers the aggregation and that unplayed fixtures are excluded from every rate.
+
+One test is **skipped**: `test_build_dim_team_scd2`, against a deliberate `NotImplementedError` stub. `dim_team` is currently a Type 1 slowly changing dimension — the newest row wins and history is overwritten — and the stub documents what Type 2 would take.
 
 ## Stack
 
