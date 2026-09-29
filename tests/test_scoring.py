@@ -58,10 +58,10 @@ def test_build_mart_coupon(spark):
   # the whole coupon even where the star does not
   assert keyed["m1"]["league"] == "Eliteserien"
 
-  # no surrogate keys here: the only join this table is for is predictions
-  # against results, and that goes through match_key
-  assert "league_sk" not in result.columns
-  assert "home_team_sk" not in result.columns
+  # the mart carries names, not foreign keys: the only join it is for is
+  # predictions against results, and that goes through match_key
+  assert "league_key" not in result.columns
+  assert "home_team_key" not in result.columns
   assert abs(keyed["m2"]["elo_expected_score"] - expected_home_score(1700.0, 1500.0)) < 1e-9
 
   # a match with no Elo still appears rather than being dropped -- an

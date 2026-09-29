@@ -41,13 +41,15 @@ def date_key(match_start: Column) -> Column:
 
 
 def build_dim_team(df: DataFrame) -> DataFrame:
-    """One row per team: team_sk, team_key, team_name, team_id, country.
+    """One row per team: team_key, team_name, team_id, country.
 
-    team_sk is a hash of team_key rather than a counter. These tables are
-    rebuilt from scratch on every run, so a counter would hand out
-    different numbers each time and silently repoint every fact row at the
-    wrong team; a hash of the business key gives the same value every
-    rebuild.
+    team_key is the uppercased team_name, and it is what fact_match joins
+    on. `team_id` is Svenska Spel's own id, carried as an attribute rather
+    than a key: it was renumbered between 2021 and 2023, so the same team
+    has two ids across the history (Newcastle is both 88 and 1000041) and
+    keying on it would split every long-lived team in two. The name is the
+    stable identifier in this data -- no team has been renamed in thirteen
+    years.
 
     Deliberately NOT scoped to English teams even though gold is: a coupon
     regularly carries Norwegian, Scottish or Spanish fixtures and
@@ -110,7 +112,7 @@ def build_dim_league(df: DataFrame) -> DataFrame:
     """df: two columns, league_name/country -- the LEAGUE_COUNTRY dict as a
     DataFrame.
 
-    Columns: league_sk, league_key, league_name, country.
+    Columns: league_key, league_name, country.
 
     No Unknown member. One was added on 2026-09-29 so mart.coupon could
     give out-of-scope leagues a real key rather than a null one, and
