@@ -1,3 +1,4 @@
+from transforms.dimensions import build_dim_league, team_surrogate_key
 from transforms.fact_match import build_fact_match
 
 MATCHES_SCHEMA = (
@@ -21,8 +22,8 @@ def test_build_fact_match(spark):
           ("m2", "Premier League", "Arsenal", "Chelsea", "2024-03-10T15:00:00",
            2, 1, "1", 45.0, 30.0, 25.0, 1.8, 3.5, 4.2, 1.9, 3.4, 4.0,
            0.5852, 0.2459, 0.1689, "Ended", "72221288"),
-          # Sweden, Mar -> season 2024
-          ("m3", "Allsvenskan", "AIK", "Djurgarden", "2024-03-10T15:00:00",
+          # League Two, Mar -> season 2023/2024 (English shape, like m2)
+          ("m3", "League Two", "AIK", "Djurgarden", "2024-03-10T15:00:00",
            2, 1, "1", 45.0, 30.0, 25.0, 1.8, 3.5, 4.2, 1.9, 3.4, 4.0,
            0.5852, 0.2459, 0.1689, "Ended", "72221288"),
           # out of scope -> dropped by the inner join
@@ -32,12 +33,12 @@ def test_build_fact_match(spark):
       ],
       MATCHES_SCHEMA,
   )
-  dim_league = spark.createDataFrame(
-      [
-          ("PREMIER LEAGUE", "Premier League", "England"),
-          ("ALLSVENSKAN", "Allsvenskan", "Sweden"),
-      ],
-      'league_key string, league_name string, country string',
+  # built by the real function, so the surrogate keys match what gold holds
+  dim_league = build_dim_league(
+      spark.createDataFrame(
+          [("Premier League", "England"), ("League Two", "England")],
+          'league_name string, country string',
+      )
   )
 
   result = build_fact_match(matches, dim_league)
@@ -46,14 +47,15 @@ def test_build_fact_match(spark):
   assert "m4" not in rows
   assert result.count() == 3
 
-  assert rows["m1"]["home_team_key"] == "ARSENAL"
-  assert rows["m1"]["away_team_key"] == "CHELSEA"
+  # facts carry surrogate keys only -- names live in the dimensions
+  assert "home_team_key" not in result.columns
+  assert rows["m1"]["home_team_sk"] != rows["m1"]["away_team_sk"]
   assert rows["m1"]["date_key"] == 20240815
-  assert rows["m1"]["league_key"] == "PREMIER LEAGUE"
+  assert rows["m1"]["league_sk"] is not None
 
   assert rows["m1"]["season_key"] == "2024/2025"
   assert rows["m2"]["season_key"] == "2023/2024"
-  assert rows["m3"]["season_key"] == "2024"
+  assert rows["m3"]["season_key"] == "2023/2024"
 
   assert rows["m1"]["calibrated_1"] is None
   assert rows["m1"]["calibrated_x"] is None

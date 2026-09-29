@@ -1,7 +1,8 @@
 from pyspark.sql import functions as F
 
 from transforms.elo import expected_home_score
-from transforms.scoring import build_coupon_predictions, expected_home_score_column
+from transforms.dimensions import build_dim_league
+from transforms.scoring import build_mart_coupon, expected_home_score_column
 
 MATCHES_SCHEMA = (
     'draw_number int, event_number int, match_id string, match_start string, '
@@ -25,7 +26,7 @@ def test_expected_home_score_column(spark):
   for row in rows:
     assert abs(row["p"] - expected_home_score(row["home"], row["away"])) < 1e-9
 
-def test_build_coupon_predictions(spark):
+def test_build_mart_coupon(spark):
   matches = spark.createDataFrame(
       [
           (4971, 2, "m2", "2026-09-19T18:30:00", "Premier League", "Arsenal",
@@ -43,12 +44,29 @@ def test_build_coupon_predictions(spark):
       "match_id string, elo_home double, elo_away double",
   )
 
-  result = build_coupon_predictions(matches, elo, 4971)
+  dim_league = build_dim_league(
+      spark.createDataFrame(
+          [("Premier League", "England")], 'league_name string, country string'
+      )
+  )
+
+  result = build_mart_coupon(matches, elo, dim_league, 4971)
   rows = result.collect()
 
-  assert [row["match_id"] for row in rows] == ["m1", "m2"]  # ordered by event_number
+  assert [row["match_key"] for row in rows] == ["m1", "m2"]  # ordered by event_number
 
-  keyed = {row["match_id"]: row for row in rows}
+  keyed = {row["match_key"]: row for row in rows}
+
+  # readable by design: this is the table a person opens on a Thursday
+  assert keyed["m2"]["home_team"] == "Arsenal"
+  assert keyed["m2"]["league"] == "Premier League"
+
+  # and still joinable: an out-of-scope league resolves to the Unknown
+  # member rather than to a null foreign key
+  unknown_sk = {r["league_key"]: r["league_sk"] for r in dim_league.collect()}["UNKNOWN"]
+  assert keyed["m1"]["league"] == "Eliteserien"
+  assert keyed["m1"]["league_sk"] == unknown_sk
+  assert keyed["m2"]["league_sk"] != unknown_sk
   assert abs(keyed["m2"]["elo_expected_score"] - expected_home_score(1700.0, 1500.0)) < 1e-9
 
   # a match with no Elo still appears rather than being dropped -- an
