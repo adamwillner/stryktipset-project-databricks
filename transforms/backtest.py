@@ -44,12 +44,16 @@ def _per_match_brier(prefix: str):
     return total / F.lit(float(len(OUTCOMES)))
 
 
-def paired_brier_difference(df_calibrated: DataFrame) -> dict:
+def paired_brier_difference(
+    df_calibrated: DataFrame, baseline: str = "streck", candidate: str = "calibrated"
+) -> dict:
     """Is calibrated actually better than raw, or is the gap noise?
 
-    Scores each match twice -- once from streck_*, once from calibrated_*
-    -- and looks at the *difference per match*. Positive means calibrated
-    did better on that match.
+    Scores each match twice -- once from <baseline>_1/_x/_2, once from
+    <candidate>_1/_x/_2 -- and looks at the *difference per match*.
+    Positive means the candidate did better on that match. Defaults compare
+    raw streck against calibrated streck; pass other prefixes to compare
+    anything else on the same footing.
 
     Paired on purpose. The two predictions describe the same matches, so
     comparing them match by match cancels out the thing that dominates the
@@ -61,7 +65,8 @@ def paired_brier_difference(df_calibrated: DataFrame) -> dict:
     at that sample size; if it straddles zero, the data cannot tell.
     """
     scored = df_calibrated.filter(F.col("result").isNotNull()).withColumn(
-        "brier_difference", _per_match_brier("streck") - _per_match_brier("calibrated")
+        "brier_difference",
+        _per_match_brier(baseline) - _per_match_brier(candidate),
     )
 
     row = scored.agg(
@@ -82,3 +87,10 @@ def paired_brier_difference(df_calibrated: DataFrame) -> dict:
         "ci_low": (mean - 1.96 * standard_error) if standard_error else None,
         "ci_high": (mean + 1.96 * standard_error) if standard_error else None,
     }
+
+def pooled_brier(df: DataFrame, prefix: str) -> float:
+    """Pooled Brier score for one set of probability columns
+    (<prefix>_1/_x/_2). Lower is better; 0.2222 is what predicting
+    33/33/33 every time scores, whatever the real base rates are."""
+    scored = df.filter(F.col("result").isNotNull())
+    return scored.select(F.avg(_per_match_brier(prefix)).alias("brier")).first()["brier"]
