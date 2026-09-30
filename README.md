@@ -36,19 +36,19 @@ The mart reads **silver, not gold**: gold holds English league football, and a c
 
 ## Does it work?
 
-Measured on matches the models had never seen: fitted on everything before 2023, scored on the 2,541 since. Lower is better.
+Measured on matches the models had never seen, on the five English tiers only: fitted on 4,391 matches before 2023, scored on the 1,725 since. Lower is better.
 
 | | Brier | |
 |---|---|---|
 | knowing nothing (33/33/33) | 0.2222 | |
-| raw `streck` | 0.2053 | the crowd's own edge |
-| **calibrated crowd** | **0.2029** | **+0.0024, t = 3.57 — real** |
-| elo alone | 0.2129 | genuine signal, weaker than the market |
-| crowd + elo, best combination | 0.2029 | no difference |
+| raw `streck` | 0.2095 | the crowd's own edge |
+| **calibrated crowd** | **0.2065** | **+0.0030, t = 3.46 — real** |
+| elo alone | 0.2134 | genuine signal, weaker than the market |
+| crowd + elo, best combination | 0.2063 | no measurable difference |
 
-**Calibrating the crowd works.** It beats raw `streck` by about 14% of the crowd's own edge over knowing nothing — small, but statistically solid.
+**Calibrating the crowd works.** It beats raw `streck` by about 24% of the crowd's own edge over knowing nothing — small, but statistically solid.
 
-**Elo doesn't add to it.** Four ways of combining them — an equal blend, a fitted-weight blend, a logistic pool in log-odds space, and a pool with an interaction term testing whether Elo helps specifically where the market is unsure — all land on the crowd's own score. Elo knows real things about team strength; the market has already priced them in.
+**Elo doesn't add to it.** Four ways of combining them — an equal blend, a fitted-weight blend, a logistic pool in log-odds space, and a pool with an interaction term testing whether Elo helps specifically where the market is unsure — all land on the crowd's own score or below it. Elo knows real things about team strength; the market has already priced them in.
 
 `backtest.ipynb` reproduces all of it. The reasoning, the caveats, and one instructive trap about reading coefficients are in `project-context.md`.
 
@@ -116,7 +116,7 @@ Full column lists, the key decisions and their trade-offs are in `project-contex
 Transform functions live in `transforms/`, not inline in the notebooks, so they're importable and testable with plain `pytest`. The notebooks stay thin: imports, table names, and a `main()` that reads, transforms and writes.
 
 ```bash
-./run-tests.sh        # from a WSL terminal — 25 tests, ~40s
+./run-tests.sh        # from a WSL terminal — 26 tests, ~50s
 ```
 
 Local Spark is *classic* Spark; Databricks Free Edition is serverless Spark Connect. So the local suite is a fast inner loop on `transforms/`, not a substitute for running it in a notebook before trusting a pipeline change. One-time setup and the reason it can't run on Windows are in `project-context.md`.

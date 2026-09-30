@@ -198,6 +198,27 @@ Two fact tables sharing dimensions:
   | logistic pool + interaction | 0.2033 | no difference |
 
   **One finding worth remembering.** The pool assigns Elo a *larger* standardised coefficient than the crowd (0.276 vs 0.217) and still gains nothing. That is what collinearity looks like: when two predictors carry the same information, a fit can shuffle weight between them freely without changing its predictions, so a large coefficient means "a usable way to express the answer", not "adds something new". Only the out-of-sample score settles it. Anyone reading coefficient size as importance here would conclude the opposite of the truth.
+
+- **Re-run on the English tiers only, and every conclusion held** (`backtest`, 2026-09-30). The evaluation had been running on all of silver -- England and Sweden together -- while gold covers the five English tiers, so one calibration curve was describing two different crowds at once. `scope_to_leagues` narrows it, reusing `LEAGUE_COUNTRY`'s own keys so the two scopes cannot drift apart. Same cutoff, 4,391 train / 1,725 test:
+
+  | | pooled Brier | vs crowd alone |
+  |---|---|---|
+  | knowing nothing | 0.2222 | |
+  | raw `streck` | 0.2095 | |
+  | **calibrated crowd** | **0.2065** | +0.0030, t = 3.46 -- real |
+  | elo alone | 0.2134 | |
+  | blend, 50/50 | 0.2075 | worse |
+  | blend, fitted w = 0.90 | 0.2063 | no difference, t = 1.08 |
+  | logistic pool | 0.2079 | **worse, t = -2.81** |
+  | logistic pool + interaction | 0.2080 | worse |
+
+  **The absolute Briers are not comparable to the all-leagues run above.** 0.2065 against 0.2029 is a different set of matches, not a worse model -- English league football is simply harder to call than the England+Sweden mix was, on both raw and calibrated numbers. Only comparisons *within* a run mean anything.
+
+  Two things changed, both instructive. Calibration's edge **grew** in both absolute terms (+0.0030, up from +0.0024) and as a share of the crowd's own edge (24%, up from 14%), which is what fitting one curve to one population instead of two should do -- and it stayed significant (t = 3.46) despite a third fewer test rows. The logistic pool went from merely not-better (t = -1.21) to **measurably worse** (t = -2.81): 4,391 training rows instead of 6,508, the same number of parameters, so it overfits harder. A flexible model losing ground when the data shrinks is the ordinary case, not a surprise.
+
+  **`scope_to_leagues` is applied after `build_elo`, deliberately.** English clubs meet lower tiers in the domestic cups; those results are out of scope for gold but are still real evidence about the teams. Filtering first would discard them and leave every cup-playing side slightly mis-rated.
+
+  Side effect worth knowing: dropping Sweden moved the split from ~80/20 to **72/28**, because Sweden's share of the history is not uniform across the years. `CUTOFF` was left at 2023-01-01 so this run stays comparable to the previous one; shifting it to mid-2023 would restore 80/20.
 - Tests: all seven `transforms/` modules are tested (see Testing section above); no CI runs any of this automatically yet — run locally with `./run-tests.sh` from WSL, or via `%pip install pytest` + `pytest.main(["tests"])` in a Databricks notebook. 17 tests pass locally (WSL) as of 2026-09-29; they have not been run on Databricks' Spark Connect since `test_build_fact_match` was added, and local classic Spark doesn't reproduce the Spark Connect restrictions listed below.
 - **Elo is computed on coupon matches only, which is thinner than it looks.** Silver holds only matches that appeared on a Stryktipset coupon — about 13 per weekly draw, 7,614 of them inside the gold leagues — not complete league fixture lists. With so few matches per team the ratings move slowly and the spread stays compressed: the first full run produced a range of 1335–1797, where a complete fixture history would spread wider. Ingesting full results from football-data.org (see Data sourcing notes) is the obvious next improvement to Elo, and would matter more than tuning K.
 - The mean of `elo_home` came out at 1505.5 rather than exactly 1500. Elo is zero-sum across *teams*, but this is a mean across *match rows*, so clubs that appear on more coupons — the bigger ones, which are also the higher rated — carry more weight. Expected, not a leak.
