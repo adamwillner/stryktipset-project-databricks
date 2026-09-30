@@ -84,8 +84,16 @@ def fit_logistic_pool(
     without predicting three times over.
     """
     pdf = _frame(train, sources)
+    features = _features(pdf, sources, interaction)
+
     model = LogisticRegression(max_iter=1000)
-    model.fit(_features(pdf, sources, interaction), pdf["result"].to_numpy())
+    model.fit(features, pdf["result"].to_numpy())
+
+    # Stashed so coefficients can be reported per standard deviation. Raw
+    # coefficients are not comparable across sources: the crowd's log-odds
+    # swing much further than Elo's, so a smaller coefficient on the crowd
+    # can still carry more influence.
+    model.feature_sd_ = features.std(axis=0)
     return model
 
 
@@ -111,10 +119,18 @@ def apply_logistic_pool(
 def coefficient_summary(
     model: LogisticRegression, sources: tuple = ("calibrated", "elo"), interaction: bool = False
 ) -> str:
-    """Mean absolute coefficient per source -- how much the fit actually
-    leans on each one. A near-zero figure for a source means the model
-    learned to ignore it."""
-    weights = np.abs(model.coef_).mean(axis=0)
+    """Mean absolute coefficient per source, **standardised** -- the effect
+    of moving that feature by one standard deviation.
+
+    Raw coefficients would be misleading here. The crowd's log-odds have a
+    far wider spread than Elo's, so the same raw coefficient means much
+    more influence on the crowd side. Scaling by each feature's standard
+    deviation makes the two comparable; a near-zero figure then really does
+    mean the fit ignores that source.
+    """
+    weights = np.abs(model.coef_).mean(axis=0) * getattr(
+        model, "feature_sd_", np.ones(model.coef_.shape[1])
+    )
     labels = list(sources) + (["interaction"] if interaction else [])
     parts = []
     for index, label in enumerate(labels):
