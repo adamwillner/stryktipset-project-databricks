@@ -218,7 +218,30 @@ Two fact tables sharing dimensions:
 
   **`scope_to_leagues` is applied after `build_elo`, deliberately.** English clubs meet lower tiers in the domestic cups; those results are out of scope for gold but are still real evidence about the teams. Filtering first would discard them and leave every cup-playing side slightly mis-rated.
 
-  Side effect worth knowing: dropping Sweden moved the split from ~80/20 to **72/28**, because Sweden's share of the history is not uniform across the years. `CUTOFF` was left at 2023-01-01 so this run stays comparable to the previous one; shifting it to mid-2023 would restore 80/20.
+  Side effect: dropping Sweden moved the split from ~80/20 to **72/28**, because Sweden's share of the history is not uniform across the years.
+
+- **Cutoff moved to 2023-07-01, and it changed the reading of two results** (`backtest`, 2026-09-30). July is the gap between English seasons -- the same month `build_dim_season` cuts on -- so the boundary still falls between seasons rather than inside one. Split **4,611 / 1,505 = 75/25**, nearer the intended 80/20 than 72/28. Exactly 80/20 would need a boundary inside the 2023/24 season, trading a correctness property for a round number, so it was not taken.
+
+  | | pooled Brier | vs crowd alone |
+  |---|---|---|
+  | knowing nothing | 0.2222 | |
+  | raw `streck` | 0.2096 | |
+  | **calibrated crowd** | **0.2066** | +0.00292, t = 3.08 -- real |
+  | elo alone | 0.2118 | |
+  | blend, 50/50 | 0.2069 | worse |
+  | blend, fitted w = 0.90 | 0.2063 | +0.00031, CI -0.00002..+0.00064, t = 1.84 -- not significant |
+  | logistic pool | 0.2074 | -0.00071, t = -1.63 -- not significant |
+  | logistic pool + interaction | 0.2074 | not significant |
+
+  **This is the run to quote**, and it is now what the README reports.
+
+  **Two corrections to the previous entry, both about over-reading one split.**
+
+  1. I attributed the logistic pool's crossing into significantly-worse territory (t = -2.81 at the January cutoff) to overfitting on a smaller training set. That explanation does not survive: this run has only **5% more** training rows, and the pool's t moved from -2.81 to **-1.63**. Five percent more data cannot halve a t statistic. What actually changed is the *test* set -- the first half of 2023 moved from test into train -- so the difference was inside cutoff-to-cutoff noise all along. The pool is **not reliably worse than the crowd; it is reliably not better**, which is a weaker and more accurate claim.
+
+  2. The fitted blend's gain over the crowd has now been +0.00001 (t = 0.07), +0.00017 (t = 1.08) and +0.00031 (t = 1.84) across three configurations. The last is close enough to significance to be tempting, and it must not be quoted on its own: **three cutoffs were tried and the most favourable one reported would be exactly the multiple-comparisons trap** this evaluation exists to avoid. The defensible statement is unchanged -- no combination beats the crowd at 95% -- with the added observation that the estimate is *unstable across cutoffs*, which is itself the finding. A single chronological split is a weak instrument at this sample size; rolling-origin evaluation (refit at each season boundary, score the next season, pool the differences) is the fix, and is not built.
+
+  **What did hold across all three runs:** calibration beats raw `streck` every time, t = 3.08 to 3.57, never near the significance boundary. That is the one result robust to the cutoff.
 - Tests: all seven `transforms/` modules are tested (see Testing section above); no CI runs any of this automatically yet — run locally with `./run-tests.sh` from WSL, or via `%pip install pytest` + `pytest.main(["tests"])` in a Databricks notebook. 17 tests pass locally (WSL) as of 2026-09-29; they have not been run on Databricks' Spark Connect since `test_build_fact_match` was added, and local classic Spark doesn't reproduce the Spark Connect restrictions listed below.
 - **Elo is computed on coupon matches only, which is thinner than it looks.** Silver holds only matches that appeared on a Stryktipset coupon — about 13 per weekly draw, 7,614 of them inside the gold leagues — not complete league fixture lists. With so few matches per team the ratings move slowly and the spread stays compressed: the first full run produced a range of 1335–1797, where a complete fixture history would spread wider. Ingesting full results from football-data.org (see Data sourcing notes) is the obvious next improvement to Elo, and would matter more than tuning K.
 - The mean of `elo_home` came out at 1505.5 rather than exactly 1500. Elo is zero-sum across *teams*, but this is a mean across *match rows*, so clubs that appear on more coupons — the bigger ones, which are also the higher rated — carry more weight. Expected, not a leak.

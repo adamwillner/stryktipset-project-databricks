@@ -36,19 +36,19 @@ The mart reads **silver, not gold**: gold holds English league football, and a c
 
 ## Does it work?
 
-Measured on matches the models had never seen, on the five English tiers only: fitted on 4,391 matches before 2023, scored on the 1,725 since. Lower is better.
+Measured on matches the models had never seen, on the five English tiers only: fitted on the 4,611 matches before July 2023, scored on the 1,505 since. Lower is better.
 
 | | Brier | |
 |---|---|---|
 | knowing nothing (33/33/33) | 0.2222 | |
-| raw `streck` | 0.2095 | the crowd's own edge |
-| **calibrated crowd** | **0.2065** | **+0.0030, t = 3.46 — real** |
-| elo alone | 0.2134 | genuine signal, weaker than the market |
-| crowd + elo, best combination | 0.2063 | no measurable difference |
+| raw `streck` | 0.2096 | the crowd's own edge |
+| **calibrated crowd** | **0.2066** | **+0.0029, t = 3.08 — real** |
+| elo alone | 0.2118 | genuine signal, weaker than the market |
+| crowd + elo, best combination | 0.2063 | +0.0003, t = 1.84 — not significant |
 
-**Calibrating the crowd works.** It beats raw `streck` by about 24% of the crowd's own edge over knowing nothing — small, but statistically solid.
+**Calibrating the crowd works.** It beats raw `streck` by about 23% of the crowd's own edge over knowing nothing — small, but statistically solid, and it holds at every cutoff tried.
 
-**Elo doesn't add to it.** Four ways of combining them — an equal blend, a fitted-weight blend, a logistic pool in log-odds space, and a pool with an interaction term testing whether Elo helps specifically where the market is unsure — all land on the crowd's own score or below it. Elo knows real things about team strength; the market has already priced them in.
+**Elo doesn't clearly add to it.** Four ways of combining them — an equal blend, a fitted-weight blend, a logistic pool in log-odds space, and a pool with an interaction term testing whether Elo helps specifically where the market is unsure — none beat the crowd at the 95% level. The best of them gets close here, but the gap moves around when the cutoff moves, which is the honest limit of a single split. Elo knows real things about team strength; the market has mostly priced them in.
 
 `backtest.ipynb` reproduces all of it. The reasoning, the caveats, and one instructive trap about reading coefficients are in `project-context.md`.
 
