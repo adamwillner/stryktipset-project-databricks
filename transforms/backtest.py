@@ -3,6 +3,28 @@
 from pyspark.sql import DataFrame, functions as F
 
 
+def scope_to_leagues(matches: DataFrame, leagues) -> DataFrame:
+    """Keep only matches played in `leagues` (matched on the free-text
+    `league` name, the same way 04 scopes gold).
+
+    Narrowing the evaluation to one country trades sample size for a more
+    homogeneous population: a calibration curve fitted across England and
+    Sweden together has to describe two different crowds at once, and the
+    fitted blend weight likewise. Fewer rows widen every confidence
+    interval, so a difference that was real on the full history may stop
+    being measurable here -- that is a smaller sample, not a disproven
+    effect.
+
+    Apply this AFTER build_elo, never before. English clubs meet lower
+    tiers in the domestic cups, and those cup results are out of scope for
+    gold but are still real evidence about the teams. Filtering first would
+    throw them away and give every cup-playing team a slightly wrong
+    rating; filtering afterwards keeps Elo's evidence base whole and only
+    narrows what is fitted and judged.
+    """
+    return matches.filter(F.col('league').isin(list(leagues)))
+
+
 def split_by_date(matches: DataFrame, cutoff: str) -> tuple[DataFrame, DataFrame]:
     """Split matches into (train, test) at a date. Everything before the
     cutoff trains; the cutoff day itself and everything after is test.

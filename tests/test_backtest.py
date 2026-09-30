@@ -2,8 +2,28 @@ from transforms.backtest import (
     blend,
     fit_blend_weight,
     paired_brier_difference,
+    scope_to_leagues,
     split_by_date,
 )
+
+LEAGUE_SCHEMA = 'match_id string, league string'
+
+def test_scope_to_leagues(spark):
+  matches = spark.createDataFrame(
+      [
+          ("m1", "Premier League"),
+          ("m2", "Allsvenskan"),
+          ("m3", "National League"),
+          ("m4", "FA Cup"),          # English, but not one of the five tiers
+          ("m5", "premier league"),  # free-text match is case sensitive
+          ("m6", None),
+      ],
+      LEAGUE_SCHEMA,
+  )
+
+  scoped = scope_to_leagues(matches, ("Premier League", "National League"))
+
+  assert sorted(row["match_id"] for row in scoped.collect()) == ["m1", "m3"]
 
 MATCHES_SCHEMA = 'match_id string, match_start string, result string'
 
