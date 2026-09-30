@@ -1,4 +1,4 @@
-from transforms.elo_probability import combine, elo_predictor, to_elo_long_format
+from transforms.elo_probability import elo_predictor, to_elo_long_format
 
 MATCHES_SCHEMA = 'match_id string, result string, elo_expected_score double'
 
@@ -45,17 +45,3 @@ def test_to_elo_long_format(spark):
   assert rows["X"]["actual_occurred"] is False
   assert rows["2"]["actual_occurred"] is False
   assert abs(rows["1"]["predicted_prob"] - 0.7) < 1e-9
-
-def test_combine(spark):
-  df = spark.createDataFrame(
-      [("m1", 0.6, 0.25, 0.15, 0.4, 0.35, 0.25)],
-      "match_id string, a_1 double, a_x double, a_2 double, "
-      "b_1 double, b_x double, b_2 double",
-  )
-
-  row = combine(df, "a", "b").first()
-
-  assert abs(row["combined_1"] - 0.5) < 1e-9
-  assert abs(row["combined_x"] - 0.3) < 1e-9
-  assert abs(row["combined_2"] - 0.2) < 1e-9
-  assert abs(sum(row[f"combined_{s}"] for s in ("1", "x", "2")) - 1.0) < 1e-9

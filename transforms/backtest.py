@@ -94,3 +94,72 @@ def pooled_brier(df: DataFrame, prefix: str) -> float:
     33/33/33 every time scores, whatever the real base rates are."""
     scored = df.filter(F.col("result").isNotNull())
     return scored.select(F.avg(_per_match_brier(prefix)).alias("brier")).first()["brier"]
+
+SUFFIXES = ("1", "x", "2")
+
+
+def blend(
+    df: DataFrame, left: str, right: str, weight: float, prefix: str = "blended"
+) -> DataFrame:
+    """weight * left + (1 - weight) * right, outcome by outcome.
+
+    weight = 1 means ignore `right` entirely; 0.5 is a plain average.
+    """
+    out = df
+    for suffix in SUFFIXES:
+        out = out.withColumn(
+            f"{prefix}_{suffix}",
+            F.lit(weight) * F.col(f"{left}_{suffix}")
+            + F.lit(1.0 - weight) * F.col(f"{right}_{suffix}"),
+        )
+    return out
+
+
+def fit_blend_weight(
+    df: DataFrame, left: str, right: str, steps: int = 21
+) -> tuple[float, float]:
+    """Search weights from 0 to 1 and return (best weight, its Brier).
+
+    **Call this on the training half only.** Searching for the weight that
+    looks best on the test set would be choosing the answer to the exam
+    you are about to sit -- the same leakage that makes 05's in-sample
+    scores meaningless, just smaller.
+
+    A fixed 0.5 average is a blunt test: blending a clearly weaker
+    forecast at half weight will hurt almost regardless, so it measures
+    the choice of weight as much as the forecast. Fitting the weight asks
+    the better question -- is there *any* amount of `right` that helps? A
+    best weight of 1.0 means no, and that is a far stronger statement than
+    "my arbitrary average did not work".
+
+    Searched in pandas rather than Spark: the training half is a few
+    thousand rows, and 21 candidate weights would otherwise be 21 passes.
+
+    Note the curves producing these probabilities were themselves fitted
+    on this same data, so the Brier values here are in-sample and the
+    chosen weight is mildly optimistic. It is one parameter, and the
+    judgement that matters still happens on the untouched test half.
+    """
+    columns = [f"{side}_{suffix}" for side in (left, right) for suffix in SUFFIXES]
+    pdf = df.filter(F.col("result").isNotNull()).select("result", *columns).toPandas()
+
+    actual = {
+        suffix: (pdf["result"] == value).to_numpy(dtype=float)
+        for suffix, value in zip(SUFFIXES, ("1", "X", "2"))
+    }
+
+    best_weight, best_brier = None, None
+    for step in range(steps):
+        weight = step / (steps - 1)
+        total = 0.0
+        for suffix in SUFFIXES:
+            blended = (
+                weight * pdf[f"{left}_{suffix}"].to_numpy()
+                + (1.0 - weight) * pdf[f"{right}_{suffix}"].to_numpy()
+            )
+            total += ((blended - actual[suffix]) ** 2).mean()
+        brier = total / len(SUFFIXES)
+        if best_brier is None or brier < best_brier:
+            best_weight, best_brier = weight, brier
+
+    return best_weight, best_brier

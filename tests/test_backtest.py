@@ -1,4 +1,9 @@
-from transforms.backtest import paired_brier_difference, split_by_date
+from transforms.backtest import (
+    blend,
+    fit_blend_weight,
+    paired_brier_difference,
+    split_by_date,
+)
 
 MATCHES_SCHEMA = 'match_id string, match_start string, result string'
 
@@ -53,3 +58,39 @@ def test_paired_brier_difference(spark):
 
   # the interval is centred on the mean and has real width
   assert stats["ci_low"] < stats["mean_difference"] < stats["ci_high"]
+
+
+BLEND_SCHEMA = (
+    'result string, good_1 double, good_x double, good_2 double, '
+    'bad_1 double, bad_x double, bad_2 double'
+)
+
+def test_blend(spark):
+  df = spark.createDataFrame(
+      [("1", 0.6, 0.25, 0.15, 0.4, 0.35, 0.25)], BLEND_SCHEMA
+  )
+
+  row = blend(df, "good", "bad", 0.5).first()
+  assert abs(row["blended_1"] - 0.5) < 1e-9
+  assert abs(sum(row[f"blended_{s}"] for s in ("1", "x", "2")) - 1.0) < 1e-9
+
+  # weight 1 ignores the right-hand side entirely
+  row = blend(df, "good", "bad", 1.0).first()
+  assert abs(row["blended_1"] - 0.6) < 1e-9
+
+def test_fit_blend_weight(spark):
+  # `good` names the actual outcome every time, `bad` names the opposite.
+  # The only sensible answer is to put all the weight on `good`.
+  df = spark.createDataFrame(
+      [
+          ("1", 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+          ("2", 0.0, 0.0, 1.0, 1.0, 0.0, 0.0),
+          ("X", 0.0, 1.0, 0.0, 1.0, 0.0, 0.0),
+      ],
+      BLEND_SCHEMA,
+  )
+
+  weight, brier = fit_blend_weight(df, "good", "bad")
+
+  assert weight == 1.0
+  assert brier == 0.0  # a perfect forecast scores zero

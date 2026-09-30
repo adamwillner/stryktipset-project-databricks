@@ -83,19 +83,3 @@ def apply_elo_models(df: DataFrame, models: dict) -> DataFrame:
         column = f"elo_{outcome.lower()}"
         out = out.withColumn(column, F.col(column) / row_sum)
     return out
-
-
-def combine(df: DataFrame, left: str, right: str, prefix: str = "combined") -> DataFrame:
-    """Average two sets of probabilities, outcome by outcome.
-
-    The simplest way to ask whether one prediction knows anything the
-    other doesn't. If the average beats both, they carry independent
-    information; if it lands between them, one is just noise on the other.
-    """
-    out = df
-    for suffix in ("1", "x", "2"):
-        out = out.withColumn(
-            f"{prefix}_{suffix}",
-            (F.col(f"{left}_{suffix}") + F.col(f"{right}_{suffix}")) / F.lit(2.0),
-        )
-    return out
