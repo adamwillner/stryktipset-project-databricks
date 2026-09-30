@@ -151,7 +151,19 @@ Two fact tables sharing dimensions:
 | 08 | gold_fact_player_season | player stats (stretch) | not started |
 
 ## Known gaps
-- **The calibration has never been tested on data it did not learn from.** `05` fits the isotonic curves on every match and then scores those same matches, so every Brier score in MLflow is in-sample -- it measures how well the curve describes the data it was built from, not whether it would predict an unseen match. Fitting on everything is correct for the production path; the mistake would be reading those numbers as performance. Answering the real question needs a chronological train/test split (never a random one -- a random split trains on the future). Nothing does this yet, and `mart.coupon` will answer it the slow way as weeks accumulate.
+- **The calibration works, measured honestly** (`backtest_calibration`, 2026-09-30). Fitted on 6,508 matches before 2023, scored on the 2,541 after, which the curves had never seen:
+
+  | | pooled Brier |
+  |---|---|
+  | knowing nothing (33/33/33) | 0.2222 |
+  | raw `streck` | 0.2053 |
+  | calibrated | **0.2029** |
+
+  Paired per-match difference **+0.00245**, standard error 0.00068, 95% interval +0.0011 to +0.0038, t = 3.57 over 2,541 matches. The interval excludes zero, so the improvement is real rather than noise. In context: the crowd's whole edge over knowing nothing is 0.0169, and calibration adds about 14% more on top of that. Small, but genuine.
+
+  Caveats worth keeping: it is **one split at one cutoff**, so a different boundary could give a different number; the standard error assumes matches are independent, which is close enough but not exact for fixtures sharing a draw; and a lower Brier score is not money -- Stryktipset pays back less than it takes, so being slightly better calibrated than the crowd does not make the game positive.
+
+  `05` still fits on every match, which remains correct for the model that scores next week's coupon. Its MLflow Brier scores are still in-sample and still must not be read as performance.
 - Tests: all seven `transforms/` modules are tested (see Testing section above); no CI runs any of this automatically yet — run locally with `./run-tests.sh` from WSL, or via `%pip install pytest` + `pytest.main(["tests"])` in a Databricks notebook. 17 tests pass locally (WSL) as of 2026-09-29; they have not been run on Databricks' Spark Connect since `test_build_fact_match` was added, and local classic Spark doesn't reproduce the Spark Connect restrictions listed below.
 - **Elo is computed on coupon matches only, which is thinner than it looks.** Silver holds only matches that appeared on a Stryktipset coupon — about 13 per weekly draw, 7,614 of them inside the gold leagues — not complete league fixture lists. With so few matches per team the ratings move slowly and the spread stays compressed: the first full run produced a range of 1335–1797, where a complete fixture history would spread wider. Ingesting full results from football-data.org (see Data sourcing notes) is the obvious next improvement to Elo, and would matter more than tuning K.
 - The mean of `elo_home` came out at 1505.5 rather than exactly 1500. Elo is zero-sum across *teams*, but this is a mean across *match rows*, so clubs that appear on more coupons — the bigger ones, which are also the higher rated — carry more weight. Expected, not a leak.
