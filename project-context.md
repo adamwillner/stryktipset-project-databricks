@@ -164,6 +164,22 @@ Two fact tables sharing dimensions:
   Caveats worth keeping: it is **one split at one cutoff**, so a different boundary could give a different number; the standard error assumes matches are independent, which is close enough but not exact for fixtures sharing a draw; and a lower Brier score is not money -- Stryktipset pays back less than it takes, so being slightly better calibrated than the crowd does not make the game positive.
 
   `05` still fits on every match, which remains correct for the model that scores next week's coupon. Its MLflow Brier scores are still in-sample and still must not be read as performance.
+
+- **Elo knows real things, but nothing the crowd hasn't already priced in** (`backtest`, 2026-09-30). Same split, same test period. Elo's single expected score is turned into 1X2 probabilities by `transforms/elo_probability.py`, then scored like any other prediction:
+
+  | | pooled Brier |
+  |---|---|
+  | knowing nothing | 0.2222 |
+  | raw `streck` | 0.2053 |
+  | **calibrated crowd** | **0.2029** |
+  | elo alone | 0.2129 |
+  | crowd + elo, averaged | 0.2051 |
+
+  Elo alone beats knowing nothing by a wide margin, so the ratings are not noise -- they just know less than the market, which also sees injuries, form and motivation. The decisive number is the blend: averaging the two is **worse** than the crowd alone by 0.00221, 95% interval -0.0036 to -0.0009, t = -3.25. If Elo carried independent information, averaging would help even while being the weaker forecast, because errors pointing different ways cancel. They did not, so Elo's information looks like a subset of the crowd's.
+
+  **Consequence:** the `gap` column in `mart.coupon` is mostly Elo being wrong, not an edge. Worth keeping as a diagnostic, not worth betting on.
+
+  Caveat on what was actually tested: an **equal-weight** average is a blunt instrument, and blending a much weaker forecast at 50% will hurt almost regardless. The stronger test is fitting the weight (or a logistic regression on both) on the training half and checking whether the best blend beats the crowd out-of-sample. Not done. A fitted weight would likely land near zero on this evidence, but that is a prediction, not a result.
 - Tests: all seven `transforms/` modules are tested (see Testing section above); no CI runs any of this automatically yet — run locally with `./run-tests.sh` from WSL, or via `%pip install pytest` + `pytest.main(["tests"])` in a Databricks notebook. 17 tests pass locally (WSL) as of 2026-09-29; they have not been run on Databricks' Spark Connect since `test_build_fact_match` was added, and local classic Spark doesn't reproduce the Spark Connect restrictions listed below.
 - **Elo is computed on coupon matches only, which is thinner than it looks.** Silver holds only matches that appeared on a Stryktipset coupon — about 13 per weekly draw, 7,614 of them inside the gold leagues — not complete league fixture lists. With so few matches per team the ratings move slowly and the spread stays compressed: the first full run produced a range of 1335–1797, where a complete fixture history would spread wider. Ingesting full results from football-data.org (see Data sourcing notes) is the obvious next improvement to Elo, and would matter more than tuning K.
 - The mean of `elo_home` came out at 1505.5 rather than exactly 1500. Elo is zero-sum across *teams*, but this is a mean across *match rows*, so clubs that appear on more coupons — the bigger ones, which are also the higher rated — carry more weight. Expected, not a leak.

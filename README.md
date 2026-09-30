@@ -30,7 +30,7 @@ draw 4972 — 13 matches
 - **`streck`** — what the Swedish public actually bet
 - **`calibrated`** — the same, corrected for the crowd's known biases (isotonic regression, notebook `05`)
 - **`elo xs`** — your own rating, owing nothing to the betting market (notebook `06`)
-- **`gap`** — where the crowd and the ratings disagree, which is the only place there's anything to learn
+- **`gap`** — where the crowd and the ratings disagree. Measured, and mostly Elo being wrong: see project-context.md
 
 The mart reads **silver, not gold**: gold holds English league football, and a coupon doesn't — draw 4972 had two Nations League fixtures and no Premier League at all. See `project-context.md` for why `gap` needs converting first, and why this lives outside the star.
 
