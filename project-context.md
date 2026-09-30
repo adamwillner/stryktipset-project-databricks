@@ -292,3 +292,9 @@ Two fact tables sharing dimensions:
 - Writes the code himself — wants review and explanation, not finished files handed over.
 - Prefers short, visual docs; dislikes redundant status markers.
 - Wants diagrams only when genuinely load-bearing — plain text/tables are often enough.
+- Plain English over jargon, and short. "In simpler english please!" and "too complicated an explanation" have both been said more than once — when an explanation needs a second pass, shorten it rather than adding to it.
+- Once a decision is made, it is made. Re-arguing a settled objection is unwelcome; if a real problem turns up later, state it once with evidence.
+- Asks for a recommendation, not a menu. "come with suggestions!" means pick one and say why.
+
+## Next up (2026-10-01)
+`08_gold_fact_player_season` — player stats. The plan is already above: grain, dimensions and measures under the data-model notes, and the API-Football budget (100 requests/day, 10/minute, budget per team not per player) under data sourcing. xG stays out.
