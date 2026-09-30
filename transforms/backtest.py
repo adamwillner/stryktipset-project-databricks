@@ -28,3 +28,57 @@ def split_by_date(matches: DataFrame, cutoff: str) -> tuple[DataFrame, DataFrame
         played.filter(match_date < boundary),
         played.filter(match_date >= boundary),
     )
+
+
+OUTCOMES = (("1", "1"), ("x", "X"), ("2", "2"))  # column suffix -> result value
+
+
+def _per_match_brier(prefix: str):
+    """Brier score for one match from one set of probability columns:
+    mean over the three outcomes of (predicted - actual) squared."""
+    total = None
+    for suffix, result_value in OUTCOMES:
+        actual = (F.col("result") == F.lit(result_value)).cast("double")
+        term = F.pow(F.col(f"{prefix}_{suffix}") - actual, 2)
+        total = term if total is None else total + term
+    return total / F.lit(float(len(OUTCOMES)))
+
+
+def paired_brier_difference(df_calibrated: DataFrame) -> dict:
+    """Is calibrated actually better than raw, or is the gap noise?
+
+    Scores each match twice -- once from streck_*, once from calibrated_*
+    -- and looks at the *difference per match*. Positive means calibrated
+    did better on that match.
+
+    Paired on purpose. The two predictions describe the same matches, so
+    comparing them match by match cancels out the thing that dominates the
+    variance: some matches are simply easier to call than others. An
+    unpaired comparison would drown a real effect in that noise.
+
+    Returns the mean difference, its standard error, a t statistic and a
+    95% interval. If the interval excludes zero, the improvement is real
+    at that sample size; if it straddles zero, the data cannot tell.
+    """
+    scored = df_calibrated.filter(F.col("result").isNotNull()).withColumn(
+        "brier_difference", _per_match_brier("streck") - _per_match_brier("calibrated")
+    )
+
+    row = scored.agg(
+        F.avg("brier_difference").alias("mean"),
+        F.stddev("brier_difference").alias("sd"),
+        F.count("*").alias("n"),
+    ).first()
+
+    mean, sd, n = row["mean"], row["sd"], row["n"]
+    standard_error = (sd / (n ** 0.5)) if sd and n else None
+
+    return {
+        "mean_difference": mean,
+        "sd": sd,
+        "n": n,
+        "standard_error": standard_error,
+        "t_statistic": (mean / standard_error) if standard_error else None,
+        "ci_low": (mean - 1.96 * standard_error) if standard_error else None,
+        "ci_high": (mean + 1.96 * standard_error) if standard_error else None,
+    }
