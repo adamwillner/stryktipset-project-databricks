@@ -51,7 +51,11 @@ def to_elo_long_format(df: DataFrame) -> DataFrame:
         )
         for outcome in OUTCOMES
     ]
-    return reduce(DataFrame.unionByName, parts)
+    # a.unionByName(b), not DataFrame.unionByName(a, b): the unbound method
+    # off the classic DataFrame class reaches for _jdf, which serverless
+    # Spark Connect does not expose. Local classic Spark accepts it, so the
+    # tests pass and the job fails.
+    return reduce(lambda left, right: left.unionByName(right), parts)
 
 
 def apply_elo_models(df: DataFrame, models: dict) -> DataFrame:
