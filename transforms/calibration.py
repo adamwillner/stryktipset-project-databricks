@@ -93,7 +93,19 @@ def calibrate_matches(df: DataFrame, models: dict[str, IsotonicRegression]) -> D
 
 def evaluate_calibration(df_calibrated: DataFrame) -> dict[str, float]:
     """Prints raw vs. calibrated Brier score per outcome + pooled, and
-    returns the same numbers so main() can log them to MLflow."""
+    returns the same numbers so main() can log them to MLflow.
+
+    **These are in-sample scores.** 05 fits the curves on every match and
+    then scores those same matches, so this measures how well the fit
+    describes the data it was built from -- not how well it would predict
+    a match it has never seen. A calibrated score that beats the raw one
+    here is expected and proves nothing.
+
+    That is the right thing for the production path (you want the model
+    that has seen the most data scoring next week's coupon), but it means
+    these numbers must not be read as model performance. Answering that
+    needs a chronological train/test split, which nothing here does yet.
+    """
     column_pairs = {
         "1": ("streck_1", "calibrated_1"),
         "X": ("streck_x", "calibrated_x"),
