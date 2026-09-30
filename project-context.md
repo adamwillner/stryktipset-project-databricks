@@ -183,7 +183,21 @@ Two fact tables sharing dimensions:
 
   So the conclusion is not "my arbitrary average failed" but the stronger one: **even at the best weight the training data could find, Elo adds nothing measurable to the crowd.** A tiny dose neither helps nor hurts, which is what redundant information looks like.
 
-  Not tried: a logistic regression on both, which could in principle find structure a linear blend cannot -- for instance Elo mattering only where the crowd is uncertain. Unlikely to change the answer, and untested.
+  Finally, a **multinomial logistic pool** (`transforms/pooling.py`), which combines in log-odds rather than probability space. A weighted average always lands between its inputs, so it can never be more confident than either; logistic pooling's coefficients are not forced to sum to 1, so it can. A second variant added an interaction term -- Elo's log-odds times the entropy of the crowd's distribution -- to test whether Elo earns its keep only where the market has no strong opinion, which an additive fit averages away.
+
+  Neither helped. Logistic pool 0.2033 (difference -0.00047, t = -1.21, not significant); with the interaction, identical to four decimals.
+
+  **Four combinations tried, all agree:**
+
+  | | pooled Brier | vs crowd alone |
+  |---|---|---|
+  | calibrated crowd | **0.2029** | -- |
+  | blend, 50/50 | 0.2051 | worse, t = -3.25 |
+  | blend, fitted w = 0.90 | 0.2029 | no difference, t = 0.07 |
+  | logistic pool | 0.2033 | no difference, t = -1.21 |
+  | logistic pool + interaction | 0.2033 | no difference |
+
+  **One finding worth remembering.** The pool assigns Elo a *larger* standardised coefficient than the crowd (0.276 vs 0.217) and still gains nothing. That is what collinearity looks like: when two predictors carry the same information, a fit can shuffle weight between them freely without changing its predictions, so a large coefficient means "a usable way to express the answer", not "adds something new". Only the out-of-sample score settles it. Anyone reading coefficient size as importance here would conclude the opposite of the truth.
 - Tests: all seven `transforms/` modules are tested (see Testing section above); no CI runs any of this automatically yet — run locally with `./run-tests.sh` from WSL, or via `%pip install pytest` + `pytest.main(["tests"])` in a Databricks notebook. 17 tests pass locally (WSL) as of 2026-09-29; they have not been run on Databricks' Spark Connect since `test_build_fact_match` was added, and local classic Spark doesn't reproduce the Spark Connect restrictions listed below.
 - **Elo is computed on coupon matches only, which is thinner than it looks.** Silver holds only matches that appeared on a Stryktipset coupon — about 13 per weekly draw, 7,614 of them inside the gold leagues — not complete league fixture lists. With so few matches per team the ratings move slowly and the spread stays compressed: the first full run produced a range of 1335–1797, where a complete fixture history would spread wider. Ingesting full results from football-data.org (see Data sourcing notes) is the obvious next improvement to Elo, and would matter more than tuning K.
 - The mean of `elo_home` came out at 1505.5 rather than exactly 1500. Elo is zero-sum across *teams*, but this is a mean across *match rows*, so clubs that appear on more coupons — the bigger ones, which are also the higher rated — carry more weight. Expected, not a leak.
